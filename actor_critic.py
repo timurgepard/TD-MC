@@ -20,7 +20,8 @@ class _actor_network():
     def model(self):
         state = Input(shape=self.state_dim, dtype='float64')
         x = NoisyDense(400, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
-        x = NoisyDense(300, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400),1/np.sqrt(400)))(x)
+        x = concatenate([state, x])
+        x = NoisyDense(300, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim),1/np.sqrt(400+self.state_dim)))(x)
         x = concatenate([state, x])
         out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
         return Model(inputs=state, outputs=out)
@@ -33,10 +34,10 @@ class _q_network():
 
     def model(self):
         state = Input(shape=self.state_dim, name='state_input', dtype='float64')
-        state_i = NoisyDense(400, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        x = NoisyDense(400, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
         action = Input(shape=(self.action_dim,), name='action_input')
-        x = concatenate([state_i, action])
-        x = NoisyDense(300, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(401),1/np.sqrt(401)))(x)
-        x = concatenate([state, x])
+        x = concatenate([x, state, action])
+        x = NoisyDense(300, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim+self.action_dim),1/np.sqrt(400+self.state_dim+self.action_dim)))(x)
+        x = concatenate([x, state, action])
         out = Dense(1, activation='linear')(x)
         return Model(inputs=[state, action], outputs=out)
