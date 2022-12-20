@@ -105,10 +105,10 @@ class DDPG():
     # --------------Update Networks--------------#
     #############################################
 
-    def ANN_update(self, ANN, QNN, opt, St):
+    def ANN_update(self, ANN, QNN, opt, St, Qt):
         with tf.GradientTape(persistent=True) as tape:
             A = ANN(St)
-            Q = QNN([St, A])
+            Q = QNN([St, A])-Qt
         dq_da = tape.gradient(Q, A)
         dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da/2)
         da_dtheta = tape.gradient(A, ANN.trainable_variables, output_gradients=-dq_da)
@@ -127,14 +127,14 @@ class DDPG():
         self.St, self.At, self.rt, self.Ql, self.St_, self.Ql_ = self.record.sample_batch()
         self.QNN_t.set_weights(self.QNN.get_weights())
         self.NN_update(self.QNN_t, [self.St, self.At], self.Ql)
-        self.ANN_update(self.ANN, self.QNN_t, self.ANN_Adam, self.St)
+        self.ANN_update(self.ANN, self.QNN_t, self.ANN_Adam, self.St, self.Ql)
 
     def TD_2(self):
         A_ = self.ANN(self.St_)
         Q_ = self.QNN_t([self.St_, A_])
         Qt = self.rt + self.gamma*(Q_+self.Ql_)/2
         self.NN_update(self.QNN, [self.St, self.At], Qt)
-        self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St)
+        self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St, Qt)
 
 
 
