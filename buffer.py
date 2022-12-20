@@ -24,7 +24,7 @@ class Replay:
         if len(self.buffer)>=self.batch_size:
             arr = np.random.default_rng().choice(self.buffer, size=self.batch_size, replace=False)
             Sts =  np.vstack(arr[:, 0, :])
-            Ats = np.vstack(arr[:, 1, :])
+            At = np.vstack(arr[:, 1, 0])
             rts = np.vstack(arr[:, 2, :])
 
             Ql = Qt = np.zeros((self.batch_size,1))
@@ -33,6 +33,5 @@ class Replay:
                 if t<n_steps-1: Ql += 0.1*0.9**t*Qt
             Ql += 0.9**(n_steps-1)*Qt
             St = np.vstack(Sts[:,0])
-            At = np.vstack(Ats[:,0])
             Stn_ = np.vstack(Sts[:, n_steps])
         return St, At, Ql, Stn_
