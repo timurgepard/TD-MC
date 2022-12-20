@@ -51,7 +51,7 @@ class DDPG():
         self.gamma = gamma
         self.rewards_norm = divide_rewards_by
 
-        self.tr_steps = round(1/self.eps)
+        self.tr_steps = round(2/self.eps)
         self.n_steps = round(4/self.eps)
         self.horizon = int(batch_size/4)+1 #+1 to fetch next state from current state roll_out
         self.max_steps = max_time_steps  ## Time limit for a episode
@@ -120,15 +120,18 @@ class DDPG():
 
     def eps_step(self):
         self.eps = math.exp(-self.x)
-        self.tr_steps = round(1/self.eps)
-        self.n_steps = round(4/self.eps)
+        self.tr_steps = round(2/self.eps)
+        self.n_steps = round(8/self.eps)
         if self.n_steps<=self.horizon-1:
             self.x += self.act_learning_rate
 
-    def TD_n(self):
+
+    def TD_1(self):
         self.eps_step()
         self.update_target()
         self.St, self.At, self.Ql, self.Stn_ = self.replay.restore(self.n_steps, self.gamma)
+
+    def TD_2(self):
         A_ = self.ANN_t(self.Stn_)
         Q_ = self.QNN_t([self.Stn_, A_])
         Qt = self.Ql + self.gamma**self.n_steps*Q_
@@ -185,13 +188,17 @@ class DDPG():
                 else:
                     cnt += 1
                     score += reward
-                    #self.env.render(mode="human")
+                    self.env.render(mode="human")
                     if cnt%self.n_steps == 0: self.update_buffer()
                     if len(self.replay.buffer)>20*self.batch_size:
-                        if self.gradual_start(t, self.tr_steps, self.horizon):
-                        #if cnt%self.tr_steps==0:
-                            self.TD_n()
-
+                        #if self.gradual_start(t, self.tr_steps, self.horizon):
+                        if cnt%self.tr_steps==0:
+                            self.td+=1
+                            if self.td==1:
+                                self.TD_1()
+                            elif self.td==2:
+                                self.TD_2()
+                                self.td=0
 
                 self.replay.cache.append([state, action, reward/self.rewards_norm])
                 state = state_next
@@ -205,8 +212,9 @@ class DDPG():
             with open('Scores.txt', 'a+') as f:
                 f.write(str(score) + '\n')
 
+            print('%d: %f, %f, | eps %f | record size %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer)))
+
             if episode>=0 and episode%10==0:
-                print('%d: %f, %f, | eps %f | record size %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer)))
                 self.save()
 
 
@@ -214,7 +222,7 @@ class DDPG():
 
 
 
-option = 6
+option = 5
 
 if option == 1:
     env = 'Pendulum-v0'
@@ -238,7 +246,7 @@ elif option == 4:
     critic_learning_rate = 0.001
 elif option == 5:
     env = 'BipedalWalker-v3'
-    max_time_steps = 400
+    max_time_steps = 2000
     actor_learning_rate = 0.0001
     critic_learning_rate = 0.001
 elif option == 6:
@@ -257,7 +265,7 @@ ddpg = DDPG(     env_name=env, # Gym environment with continous action space
                  actor=None,
                  critic=None,
                  buffer=None,
-                 divide_rewards_by = 10000, #This brings Q to r range
+                 divide_rewards_by = 1, #This brings Q to r range
                  max_buffer_size =100000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = max_time_steps,# no of time steps per epoch
