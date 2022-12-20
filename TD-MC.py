@@ -51,8 +51,8 @@ class DDPG():
         self.gamma = gamma
         self.rewards_norm = divide_rewards_by
 
-        self.tr_steps = 1#round(1/self.eps)
-        self.n_steps = 4 #round(4/self.eps)
+        self.tr_steps = round(1/self.eps)
+        self.n_steps = round(4/self.eps)
         self.horizon = int(batch_size/2)+1 #+1 to fetch next state from current state roll_out
         self.max_steps = max_time_steps  ## Time limit for a episode
         self.replay = Replay(self.max_record_size, self.batch_size)
@@ -100,11 +100,11 @@ class DDPG():
     # --------------Update Networks--------------#
     #############################################
 
-    def ANN_update(self, ANN, QNN, opt_a, St):
+    def ANN_update(self, ANN, QNN, opt_a, St, Qt):
         with tf.GradientTape(persistent=True) as tape:
             A = ANN(St)
-            Q = QNN([St,A])
-            R = tf.math.reduce_mean(Q)
+            R = QNN([St,A])-Qt
+            R = tf.math.reduce_mean(R)
         dR_dA = tape.gradient(R, A) #first take gradient of dQ/dA
         dR_dA = tf.math.abs(dR_dA)*tf.math.tanh(dR_dA) #then smooth it
         dA_dW = tape.gradient(A, ANN.trainable_variables, output_gradients=-dR_dA)
@@ -120,8 +120,8 @@ class DDPG():
 
     def eps_step(self):
         self.eps = math.exp(-self.x)
-        #self.tr_steps = round(1/self.eps)
-        #self.n_steps = round(4/self.eps)
+        self.tr_steps = round(1/self.eps)
+        self.n_steps = round(4/self.eps)
         if self.n_steps<=self.horizon-1:
             self.x += 0.2*self.act_learning_rate
 
@@ -133,9 +133,9 @@ class DDPG():
     def TD_2(self):
         A_ = self.ANN_t(self.Stn_)
         Q_ = self.QNN_t([self.Stn_, A_])
-        Q = self.Ql + self.gamma**self.n_steps*Q_
-        self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At], Q)
-        self.ANN_update(self.ANN, self.QNN, self.ANN_opt, self.St)
+        Qt = self.Ql + self.gamma**self.n_steps*Q_
+        self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At], Qt)
+        self.ANN_update(self.ANN, self.QNN, self.ANN_opt, self.St, Qt)
 
 
     def update_target(self):
@@ -190,8 +190,8 @@ class DDPG():
                     #self.env.render(mode="human")
                     if cnt%self.n_steps == 0: self.update_buffer()
                     if len(self.replay.buffer)>20*self.batch_size:
-                        #if self.gradual_start(t, self.tr_steps, self.horizon):
-                        if cnt%self.tr_steps==0:
+                        if self.gradual_start(t, self.tr_steps, self.horizon):
+                        #if cnt%self.tr_steps==0:
                             #self.TD_n()
                             self.td+=1
                             if self.td==1:
