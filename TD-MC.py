@@ -188,7 +188,8 @@ class DDPG():
                     #self.env.render(mode="human")
                     if cnt%self.n_steps == 0: self.update_buffer()
                     if len(self.replay.buffer)>20*self.batch_size:
-                        if self.gradual_start(t, self.tr_steps, self.horizon):
+                        #if self.gradual_start(t, self.tr_steps, self.horizon):
+                        if cnt%self.tr_steps==0:
                             self.TD_n()
                             """
                             self.td+=1
