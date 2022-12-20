@@ -213,7 +213,7 @@ class DDPG():
 
 
 
-option = 6
+option = 5
 
 if option == 1:
     env = 'Pendulum-v0'
