@@ -31,6 +31,7 @@ class DDPG():
                  actor=None,
                  critic=None,
                  buffer=None,
+                 divide_rewards_by = 1,
                  max_buffer_size =10000, # maximum transitions to be stored in buffer
                  batch_size =64, # batch size for training actor and critic networks
                  max_time_steps = 1000 ,# no of time steps per epoch
@@ -52,12 +53,13 @@ class DDPG():
         self.act_learning_rate = actor_learning_rate
         self.critic_learning_rate = critic_learning_rate
         self.n_episodes = n_episodes
+        self.rewards_norm = divide_rewards_by
 
         self.env = env
         self.action_dim = action_dim = env.action_space.shape[0]
 
         self.cache = []
-        self.s_x = 0.0
+        self.x = 0.0
         self.eps = 1.0
 
         observation_dim = len(env.reset())
@@ -82,12 +84,10 @@ class DDPG():
         #############################################
 
     def forward(self, tstate):
-        action = self.ANN(tstate)
+        action = self.ANN(tstate)[0]
         eps = max(self.eps, 0.1)
-        if random.uniform(0.0, 1.0)>self.eps:
-            action = action[0]
-        else:
-            action = action[0] + tf.random.normal([self.action_dim], 0.0, 2*eps)
+        if random.uniform(0.0, 1.0)<self.eps:
+            action += tf.random.normal([self.action_dim], 0.0, 2*eps)
         return np.clip(action, -1.0, 1.0)
 
 
@@ -99,11 +99,11 @@ class DDPG():
                     Ql = Qt = 0.0
                     for k in range(t, t+self.n_steps):
                         Qt += self.gamma**(k-t)*self.cache[k][2]
-                        #if k<self.n_steps: Ql += 0.1*0.9**k*Qt
+                        if k<self.n_steps: Ql += 0.1*0.9**k*Qt
                     Qt_ = (Qt - Rt)/self.gamma + self.gamma**self.n_steps*self.cache[self.n_steps][2]
-                    #Ql_ = Ql +  0.1*0.9**self.n_steps*Qt + 0.9**(self.n_steps+1)*Qt_
-                    #Ql += 0.9**self.n_steps*Qt
-                    self.record.add_experience([St,At,Rt,Qt,St_,Qt_])
+                    Ql_ = Ql +  0.1*0.9**self.n_steps*Qt + 0.9**(self.n_steps+1)*Qt_
+                    Ql += 0.9**self.n_steps*Qt
+                    self.record.add_experience([St,At,Rt,Ql,St_,Ql_])
             self.cache = self.cache[-self.n_steps:]
 
 
@@ -151,8 +151,8 @@ class DDPG():
 
 
     def eps_step(self):
-        self.s_x += 0.0001
-        self.eps = math.exp(-self.s_x)
+        self.x += self.act_learning_rate
+        self.eps = math.exp(-self.x)*math.cos(self.x)
 
 
     def train(self):
@@ -176,7 +176,7 @@ class DDPG():
                 if done or t==self.max_steps-1:
                     if Rt == 0.0: Rt = reward
                     if abs(Rt)>50*abs(score/t):
-                        reward = reward/self.n_steps
+                        reward = Rt/25
                     if done_cnt>self.n_steps:
                         break
                     else:
@@ -198,7 +198,7 @@ class DDPG():
                                 self.td = 0
 
 
-                self.cache.append([state, action, reward, state_next])
+                self.cache.append([state, action, reward/self.rewards_norm, state_next])
                 state = state_next
 
 
@@ -289,10 +289,11 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  actor=None,
                  critic=None,
                  buffer=None,
+                 divide_rewards_by = 1,
                  max_buffer_size =2000000, # maximum transitions to be stored in buffer
                  batch_size = 100, # batch size for training actor and critic networks
                  max_time_steps = 2000,# no of time steps per epoch
-                 clip = 300,
+                 clip = 700,
                  discount_factor  = 0.99,
                  explore_time = 2000,
                  actor_learning_rate = 0.0001,
