@@ -1,8 +1,5 @@
 from collections import deque
-import random
 import numpy as np
-import math
-from itertools import repeat
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
