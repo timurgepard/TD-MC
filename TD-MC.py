@@ -108,8 +108,9 @@ class DDPG():
     def ANN_update(self, ANN, QNN, opt, St, Qt):
         with tf.GradientTape(persistent=True) as tape:
             A = ANN(St)
-            Q = QNN([St, A])-Qt
-        dq_da = tape.gradient(Q, A)
+            R = QNN([St, A])-Qt
+            R = tf.math.reduce_mean(R)
+        dq_da = tape.gradient(R, A)
         dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da/2)
         da_dtheta = tape.gradient(A, ANN.trainable_variables, output_gradients=-dq_da)
         opt.apply_gradients(zip(da_dtheta, ANN.trainable_variables))
@@ -117,8 +118,9 @@ class DDPG():
 
     def NN_update(self,QNN,input,output):
         with tf.GradientTape() as tape:
-            mse = (1/2)*(output-QNN(input))**2
-        gradient = tape.gradient(mse, QNN.trainable_variables)
+            e = (1/2)*(output-QNN(input))**2
+            L = tf.math.reduce_mean(e)
+        gradient = tape.gradient(L, QNN.trainable_variables)
         self.QNN_Adam.apply_gradients(zip(gradient, QNN.trainable_variables))
 
 
@@ -284,10 +286,10 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  divide_rewards_by = 10000,
-                 max_buffer_size =2000000, # maximum transitions to be stored in buffer
+                 max_buffer_size =100000, # maximum transitions to be stored in buffer
                  batch_size = 100, # batch size for training actor and critic networks
                  max_time_steps = 2000,# no of time steps per epoch
-                 clip = 700,
+                 clip = 400,
                  discount_factor  = 0.99,
                  explore_time = 10000,
                  actor_learning_rate = 0.0002,
