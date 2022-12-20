@@ -265,7 +265,7 @@ ddpg = DDPG(     env_name=env, # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  divide_rewards_by = 1000, #This brings Q to r range
-                 max_buffer_size =100000, # maximum transitions to be stored in buffer
+                 max_buffer_size =10000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = max_time_steps,# no of time steps per epoch
                  gamma  = 0.99,
