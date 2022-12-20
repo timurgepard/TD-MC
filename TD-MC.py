@@ -1,7 +1,3 @@
-
-import multiprocessing as mp
-import ctypes
-from copy import deepcopy
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
@@ -10,14 +6,12 @@ import tensorflow_probability as tfp
 
 
 import random
-import pickle
 import numpy as np
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 from buffer import Record
 from actor_critic import _actor_network,_critic_network
 import math
-from collections import deque
 
 import gym
 #import gym_vrep
@@ -151,7 +145,7 @@ class DDPG():
 
 
     def eps_step(self):
-        self.x += self.act_learning_rate
+        self.x += 0.5*self.act_learning_rate
         self.eps = math.exp(-self.x)*math.cos(self.x)
 
 
@@ -281,23 +275,23 @@ class DDPG():
 #env = gym.make('LunarLanderContinuous-v2').env
 #env = gym.make('HumanoidMuJoCoEnv-v0').env
 #env = gym.make('BipedalWalkerHardcore-v3').env
-env = gym.make('BipedalWalker-v3').env
+#env = gym.make('BipedalWalker-v3').env
 #env = gym.make('HalfCheetahMuJoCoEnv-v0').env
-#env = gym.make('HumanoidPyBulletEnv-v0').env
+env = gym.make('HumanoidPyBulletEnv-v0').env
 
 ddpg = DDPG(     env , # Gym environment with continous action space
                  actor=None,
                  critic=None,
                  buffer=None,
-                 divide_rewards_by = 1,
+                 divide_rewards_by = 10000,
                  max_buffer_size =2000000, # maximum transitions to be stored in buffer
                  batch_size = 100, # batch size for training actor and critic networks
                  max_time_steps = 2000,# no of time steps per epoch
                  clip = 700,
                  discount_factor  = 0.99,
-                 explore_time = 2000,
-                 actor_learning_rate = 0.0001,
-                 critic_learning_rate = 0.001,
+                 explore_time = 10000,
+                 actor_learning_rate = 0.0002,
+                 critic_learning_rate = 0.002,
                  n_episodes = 1000000) # no of episodes to run
 
 
