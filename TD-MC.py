@@ -51,7 +51,7 @@ class DDPG():
         self.gamma = gamma
         self.rewards_norm = divide_rewards_by
 
-        self.tr_steps = round(1/self.eps)
+        self.tr_steps = 1#round(1/self.eps)
         self.n_steps = round(4/self.eps)
         self.horizon = int(batch_size/2)+1 #+1 to fetch next state from current state roll_out
         self.max_steps = max_time_steps  ## Time limit for a episode
@@ -120,15 +120,17 @@ class DDPG():
 
     def eps_step(self):
         self.eps = math.exp(-self.x)
-        self.tr_steps = round(1/self.eps)
+        #self.tr_steps = round(1/self.eps)
         self.n_steps = round(4/self.eps)
         if self.n_steps<=self.horizon-1:
             self.x += 0.2*self.act_learning_rate
 
-    def TD_n(self):
+    def TD_1(self):
         self.eps_step()
         self.update_target()
         self.St, self.At, self.Ql, self.Stn_ = self.replay.restore(self.n_steps, self.gamma)
+
+    def TD_2(self):
         A_ = self.ANN_t(self.Stn_)
         Q_ = self.QNN_t([self.Stn_, A_])
         Q = self.Ql + self.gamma**self.n_steps*Q_
@@ -188,9 +190,15 @@ class DDPG():
                     #self.env.render(mode="human")
                     if cnt%self.n_steps == 0: self.update_buffer()
                     if len(self.replay.buffer)>20*self.batch_size:
-                        if self.gradual_start(t, self.tr_steps, self.horizon):
-                        #if cnt%self.tr_steps==0:
-                            self.TD_n()
+                        #if self.gradual_start(t, self.tr_steps, self.horizon):
+                        if cnt%self.tr_steps==0:
+                            #self.TD_n()
+                            self.td+=1
+                            if self.td==1:
+                                self.TD_1()
+                            elif self.td==2:
+                                self.TD_2()
+                                self.td=0
 
                 self.replay.cache.append([state, action, reward/self.rewards_norm])
                 state = state_next
