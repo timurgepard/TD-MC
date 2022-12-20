@@ -1,32 +1,31 @@
 from collections import deque
+import random
 import numpy as np
+import math
+from itertools import repeat
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
 
+def normalize(val, min, max):
+    return (val - min)/(max - min)
 
-class Replay:
-    def __init__(self, max_record_size, batch_size):
-        self.max_record_size = max_record_size
+class Record:
+    def __init__(self, max_buffer_size, batch_size):
+        self.max_buffer_size = max_buffer_size
         self.batch_size = batch_size
-        self.buffer = deque(maxlen=max_record_size)
-        self.cache = []
+        self.buffer = deque(maxlen=max_buffer_size)
 
-    def add_roll_outs(self, roll_out):
-        self.buffer.append(roll_out)
+    def add_experience(self, transition):
+        self.buffer.append(transition)
 
-    def restore(self, n_steps, gamma):
-        if len(self.buffer)>=self.batch_size:
-            arr = np.random.default_rng().choice(self.buffer, size=self.batch_size, replace=False)
-            Sts =  np.vstack(arr[:, 0, :])
-            At = np.vstack(arr[:, 1, 0])
-            rts = np.vstack(arr[:, 2, :])
+    def sample_batch(self):
+        arr = np.array(random.sample(self.buffer, self.batch_size))
+        states_batch = np.vstack(arr[:, 0])
+        actions_batch = np.array(list(arr[:, 1]))
+        rewards_batch = np.vstack(arr[:, 2])
+        Q_batch = np.vstack(arr[:, 3])
+        next_states_batch = np.vstack(arr[:, 4])
+        Q_next_batch = np.vstack(arr[:, 5])
 
-            Ql = Qt = np.zeros((self.batch_size,1))
-            for t in range(n_steps):
-                Qt += gamma**t*np.vstack(rts[:,t]) # here Q is calcualted
-                if t<n_steps-1: Ql += 0.1*0.9**t*Qt
-            Ql += 0.9**(n_steps-1)*Qt
-            St = np.vstack(Sts[:,0])
-            Stn_ = np.vstack(Sts[:, n_steps])
-        return St, At, Ql, Stn_
+        return states_batch, actions_batch, rewards_batch, Q_batch, next_states_batch, Q_next_batch
