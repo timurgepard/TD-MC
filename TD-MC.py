@@ -51,8 +51,8 @@ class DDPG():
         self.gamma = gamma
         self.rewards_norm = divide_rewards_by
 
-        self.tr_steps = round(2/self.eps)
-        self.n_steps = round(4/self.eps)
+        self.tr_steps = round(1/self.eps)
+        self.n_steps = round(2/self.eps)
         self.horizon = int(batch_size/2)+1 #+1 to fetch next state from current state roll_out
         self.max_steps = max_time_steps  ## Time limit for a episode
         self.replay = Replay(self.max_record_size, self.batch_size)
@@ -120,8 +120,8 @@ class DDPG():
 
     def eps_step(self):
         self.eps = math.exp(-self.x)
-        self.tr_steps = round(2/self.eps)
-        self.n_steps = round(4/self.eps)
+        self.tr_steps = round(1/self.eps)
+        self.n_steps = round(2/self.eps)
         if self.n_steps<=self.horizon-1:
             self.x += 0.2*self.act_learning_rate
 
@@ -224,8 +224,8 @@ if option == 1:
 elif option == 2:
     env = 'LunarLanderContinuous-v2'
     max_time_steps = 400
-    actor_learning_rate = 0.0004
-    critic_learning_rate = 0.004
+    actor_learning_rate = 0.0002
+    critic_learning_rate = 0.002
 elif option == 3:
     env = 'HalfCheetahPyBulletEnv-v0'
     max_time_steps = 400
@@ -234,13 +234,13 @@ elif option == 3:
 elif option == 4:
     env = 'MountainCarContinuous-v0'
     max_time_steps = 400
-    actor_learning_rate = 0.0004
-    critic_learning_rate = 0.004
+    actor_learning_rate = 0.0002
+    critic_learning_rate = 0.002
 elif option == 5:
     env = 'BipedalWalker-v3'
     max_time_steps = 400
-    actor_learning_rate = 0.0004
-    critic_learning_rate = 0.004
+    actor_learning_rate = 0.0002
+    critic_learning_rate = 0.002
 elif option == 6:
     env = 'HumanoidPyBulletEnv-v0'
     max_time_steps = 400
