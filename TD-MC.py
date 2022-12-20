@@ -125,12 +125,10 @@ class DDPG():
         if self.n_steps<=self.horizon-1:
             self.x += 0.2*self.act_learning_rate
 
-    def TD_1(self):
+    def TD_n(self):
         self.eps_step()
         self.update_target()
         self.St, self.At, self.Ql, self.Stn_ = self.replay.restore(self.n_steps, self.gamma)
-
-    def TD_2(self):
         A_ = self.ANN_t(self.Stn_)
         Q_ = self.QNN_t([self.Stn_, A_])
         Qt = self.Ql + self.gamma**self.n_steps*Q_
@@ -191,14 +189,15 @@ class DDPG():
                     if cnt%self.n_steps == 0: self.update_buffer()
                     if len(self.replay.buffer)>20*self.batch_size:
                         if self.gradual_start(t, self.tr_steps, self.horizon):
-                        #if cnt%self.tr_steps==0:
-                            #self.TD_n()
+                            self.TD_n()
+                            """
                             self.td+=1
                             if self.td==1:
                                 self.TD_1()
                             elif self.td==2:
                                 self.TD_2()
                                 self.td=0
+                            """
 
                 self.replay.cache.append([state, action, reward/self.rewards_norm])
                 state = state_next
@@ -221,7 +220,7 @@ class DDPG():
 
 
 
-option = 5
+option = 6
 
 if option == 1:
     env = 'Pendulum-v0'
