@@ -4,8 +4,6 @@ import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
 
-def normalize(val, min, max):
-    return (val - min)/(max - min)
 
 class Replay:
     def __init__(self, max_record_size, batch_size):
