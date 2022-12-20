@@ -1,6 +1,6 @@
 import numpy as np
 from tensorflow.keras.initializers import RandomUniform as RU
-from tensorflow.keras.layers import Dense, Input, concatenate, BatchNormalization, Dropout, SimpleRNN
+from tensorflow.keras.layers import Dense, Input, concatenate
 from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow_addons.layers import NoisyDense
@@ -19,8 +19,8 @@ class _actor_network():
 
     def model(self):
         state = Input(shape=self.state_dim, dtype='float64')
-        x = NoisyDense(100, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
-        x = NoisyDense(75, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(100),1/np.sqrt(100)))(x)
+        x = NoisyDense(400, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        x = NoisyDense(300, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400),1/np.sqrt(400)))(x)
         out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
         return Model(inputs=state, outputs=out)
 
@@ -32,9 +32,9 @@ class _q_network():
 
     def model(self):
         state = Input(shape=self.state_dim, name='state_input', dtype='float64')
-        state_i = NoisyDense(100, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        state_i = NoisyDense(400, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
         action = Input(shape=(self.action_dim,), name='action_input')
         x = concatenate([state_i, action])
-        x = NoisyDense(75, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(101),1/np.sqrt(101)))(x)
+        x = NoisyDense(300, sigma=0.01, activation=atanh, kernel_initializer=RU(-1/np.sqrt(401),1/np.sqrt(401)))(x)
         out = Dense(1, activation='linear')(x)
         return Model(inputs=[state, action], outputs=out)
