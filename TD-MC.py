@@ -191,14 +191,7 @@ class DDPG():
                         #if self.gradual_start(t, self.tr_steps, self.horizon):
                         if cnt%self.tr_steps==0:
                             self.TD_n()
-                            """
-                            self.td+=1
-                            if self.td==1:
-                                self.TD_1()
-                            elif self.td==2:
-                                self.TD_2()
-                                self.td=0
-                            """
+
 
                 self.replay.cache.append([state, action, reward/self.rewards_norm])
                 state = state_next
