@@ -27,8 +27,8 @@ class DDPG():
                  batch_size =64, # batch size for training actor and critic networks
                  max_time_steps = 1000,# no of time steps per epoch
                  gamma  = 0.99,
-                 actor_learning_rate = 0.0002,
-                 critic_learning_rate = 0.002,
+                 actor_learning_rate = 0.0001,
+                 critic_learning_rate = 0.001,
                  n_episodes = 1000):# no of episodes to run
 
 
@@ -123,7 +123,7 @@ class DDPG():
         self.tr_steps = round(1/self.eps)
         self.n_steps = round(4/self.eps)
         if self.n_steps<=self.horizon-1:
-            self.x += 0.2*self.act_learning_rate
+            self.x += self.act_learning_rate
 
     def TD_n(self):
         self.eps_step()
@@ -224,33 +224,33 @@ if option == 1:
 elif option == 2:
     env = 'LunarLanderContinuous-v2'
     max_time_steps = 400
-    actor_learning_rate = 0.0002
-    critic_learning_rate = 0.002
+    actor_learning_rate = 0.0001
+    critic_learning_rate = 0.001
 elif option == 3:
     env = 'HalfCheetahPyBulletEnv-v0'
     max_time_steps = 400
-    actor_learning_rate = 0.0002
-    critic_learning_rate = 0.002
+    actor_learning_rate = 0.0001
+    critic_learning_rate = 0.001
 elif option == 4:
     env = 'MountainCarContinuous-v0'
     max_time_steps = 400
-    actor_learning_rate = 0.0002
-    critic_learning_rate = 0.002
+    actor_learning_rate = 0.0001
+    critic_learning_rate = 0.001
 elif option == 5:
     env = 'BipedalWalker-v3'
     max_time_steps = 400
-    actor_learning_rate = 0.0002
-    critic_learning_rate = 0.002
+    actor_learning_rate = 0.0001
+    critic_learning_rate = 0.001
 elif option == 6:
     env = 'HumanoidPyBulletEnv-v0'
     max_time_steps = 400
-    actor_learning_rate = 0.0002
-    critic_learning_rate = 0.002
+    actor_learning_rate = 0.0001
+    critic_learning_rate = 0.001
 elif option == 7:
     env = 'Walker2DPyBulletEnv-v0'
     max_time_steps = 400
-    actor_learning_rate = 0.0002
-    critic_learning_rate = 0.002
+    actor_learning_rate = 0.0001
+    critic_learning_rate = 0.001
 
 
 ddpg = DDPG(     env_name=env, # Gym environment with continous action space
