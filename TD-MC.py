@@ -34,12 +34,8 @@ class Replay:
         arr = np.array(random.sample(self.buffer, self.batch_size))
         states_batch = np.vstack(arr[:, 0])
         actions_batch = np.array(list(arr[:, 1]))
-        rewards_batch = np.vstack(arr[:, 2])
-        Q_batch = np.vstack(arr[:, 3])
-        next_states_batch = np.vstack(arr[:, 4])
-        Q_next_batch = np.vstack(arr[:, 5])
-
-        return states_batch, actions_batch, rewards_batch, Q_batch, next_states_batch, Q_next_batch
+        Q_batch = np.vstack(arr[:, 2])
+        return states_batch, actions_batch, Q_batch
 
 def atanh(x):
     return K.abs(x)*K.tanh(100*x)
@@ -52,9 +48,9 @@ class _actor_network():
 
     def model(self):
         state = Input(shape=self.state_dim, dtype='float64')
-        x = Dense(400, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        x = Dense(100, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
         x = concatenate([state, x])
-        x = Dense(300, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim),1/np.sqrt(400+self.state_dim)))(x)
+        x = Dense(75, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim),1/np.sqrt(400+self.state_dim)))(x)
         x = concatenate([state, x])
         out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
         return Model(inputs=state, outputs=out)
@@ -67,10 +63,10 @@ class _critic_network():
 
     def model(self):
         state = Input(shape=self.state_dim, name='state_input', dtype='float64')
-        x = Dense(400, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        x = Dense(100, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
         action = Input(shape=(self.action_dim,), name='action_input')
         x = concatenate([x, state, action])
-        x = Dense(300, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim+self.action_dim),1/np.sqrt(400+self.state_dim+self.action_dim)))(x)
+        x = Dense(75, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim+self.action_dim),1/np.sqrt(400+self.state_dim+self.action_dim)))(x)
         x = concatenate([x, state, action])
         out = Dense(1, activation='linear')(x)
         return Model(inputs=[state, action], outputs=out)
@@ -125,8 +121,6 @@ class DDPG():
 
         self.ANN = _actor_network(self.state_dim, self.action_dim).model()
         self.QNN = _critic_network(self.state_dim, self.action_dim).model()
-        self.QNN_t = _critic_network(self.state_dim, self.action_dim).model()
-        self.QNN_t.set_weights(self.QNN.get_weights())
 
 
         #############################################
@@ -144,16 +138,15 @@ class DDPG():
     def update_buffer(self):
         active_steps = len(self.cache) - self.n_steps
         if active_steps>0:
-            for t, (St,At,Rt,St_) in enumerate(self.cache):
+            for t, (St,At,Rt) in enumerate(self.cache):
                 if t<active_steps:
                     Ql = Qt = 0.0
                     for k in range(t, t+self.n_steps):
-                        Qt += self.gamma**(k-t)*self.cache[k][2]
-                        if k<self.n_steps: Ql += 0.1*0.9**k*Qt
-                    Qt_ = (Qt - Rt)/self.gamma + self.gamma**self.n_steps*self.cache[self.n_steps][2]
-                    #Ql_ = Ql +  0.1*0.9**self.n_steps*Qt + 0.9**(self.n_steps+1)*Qt_
-                    #Ql += 0.9**self.n_steps*Qt
-                    self.replay.add_experience([St,At,Rt,Qt,St_,Qt_])
+                        i=k-t
+                        Qt += self.gamma**i*self.cache[k][2]
+                        if i<self.n_steps: Ql += 0.3*0.7**i*Qt
+                    Ql += 0.7**self.n_steps*Qt
+                    self.replay.add_experience([St,At,Ql])
             self.cache = self.cache[-self.n_steps:]
 
 
@@ -166,7 +159,7 @@ class DDPG():
             A = ANN(St)
             R = QNN([St, A])-Qt
         dq_da = tape.gradient(R, A)
-        dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da/2)
+        dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da)
         da_dtheta = tape.gradient(A, ANN.trainable_variables, output_gradients=-dq_da)
         opt.apply_gradients(zip(da_dtheta, ANN.trainable_variables))
 
@@ -178,30 +171,20 @@ class DDPG():
         self.QNN_Adam.apply_gradients(zip(gradient, QNN.trainable_variables))
 
 
-    def TD_1(self):
+    def TD(self):
         self.eps_step()
-        self.St, self.At, self.rt, self.Ql, self.St_, self.Ql_ = self.replay.sample_batch()
-        self.QNN_t.set_weights(self.QNN.get_weights())
-        self.NN_update(self.QNN_t, [self.St, self.At], self.Ql)
-        self.ANN_update(self.ANN, self.QNN_t, self.ANN_Adam, self.St, self.Ql)
-
-    def TD_2(self):
-        A_ = self.ANN(self.St_)
-        Q_ = self.QNN_t([self.St_, A_])
-        Qt = self.rt + self.gamma*(Q_+self.Ql_)/2
-        self.NN_update(self.QNN, [self.St, self.At], Qt)
-        self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St, Qt)
-
+        self.St, self.At, self.Ql = self.replay.sample_batch()
+        self.NN_update(self.QNN, [self.St, self.At], self.Ql)
+        self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St, self.Ql)
 
 
     def save(self):
         self.ANN.save('./models/actor.h5')
         self.QNN.save('./models/critic_pred.h5')
-        self.QNN_t.save('./models/critic_target.h5')
 
 
     def eps_step(self):
-        self.x += 0.5*self.act_learning_rate
+        self.x += 0.05*self.act_learning_rate
         self.eps = math.exp(-self.x)*math.cos(self.x)
 
 
@@ -212,11 +195,12 @@ class DDPG():
         cnt = 1
         score_history = []
         self.td = 0
-        Rt = 0.0
+       
         for episode in range(self.n_episodes):
             score = 0.0
             state = np.array(self.env.reset(), dtype='float32').reshape(1, state_dim)
             done_cnt = 0
+            Rt = 0.0
             for t in range(self.max_steps+self.n_steps):
 
                 action = self.forward(state)
@@ -226,7 +210,7 @@ class DDPG():
                 if done or t==self.max_steps-1:
                     if Rt == 0.0: Rt = reward
                     if abs(Rt)>50*abs(score/t):
-                        reward = Rt/25
+                        reward = Rt/self.n_steps
                     if done_cnt>self.n_steps:
                         break
                     else:
@@ -240,15 +224,10 @@ class DDPG():
 
                     if len(self.replay.buffer)>self.batch_size:
                         if cnt%(1+self.explore_time//cnt)==0:
-                            self.td += 1
-                            if self.td==1:
-                                self.TD_1()
-                            elif self.td==2:
-                                self.TD_2()
-                                self.td = 0
+                            self.TD()
 
 
-                self.cache.append([state, action, reward/self.rewards_norm, state_next])
+                self.cache.append([state, action, reward/self.rewards_norm])
                 state = state_next
 
 
@@ -256,7 +235,7 @@ class DDPG():
             self.cache = []
             score += Rt
             score_history.append(score)
-            avg_score = np.mean(score_history[-10:])
+            avg_score = np.mean(score_history[-100:])
             with open('Scores.txt', 'a+') as f:
                 f.write(str(score) + '\n')
 
@@ -264,7 +243,7 @@ class DDPG():
             if episode>=10 and episode%10==0:
                 self.save()
 
-            print('%d: %f, %f, | %f | record size %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer)))
+            print('%d: %f, %f, | %f | step %d' % (episode, score, avg_score, self.eps, cnt))
 
 
 
@@ -281,15 +260,15 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  actor=None,
                  critic=None,
                  buffer=None,
-                 divide_rewards_by = 1,
-                 max_buffer_size =100000, # maximum transitions to be stored in buffer
+                 divide_rewards_by = 10000,
+                 max_buffer_size =10000, # maximum transitions to be stored in buffer
                  batch_size = 100, # batch size for training actor and critic networks
-                 max_time_steps = 2000,# no of time steps per epoch
+                 max_time_steps = 200,# no of time steps per epoch
                  clip_horizon = 700,
                  discount_factor  = 0.99,
-                 explore_time = 10000,
-                 actor_learning_rate = 0.0002,
-                 critic_learning_rate = 0.002,
+                 explore_time = 2000,
+                 actor_learning_rate = 0.0001,
+                 critic_learning_rate = 0.001,
                  n_episodes = 1000000) # no of episodes to run
 
 
