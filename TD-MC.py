@@ -128,10 +128,7 @@ class DDPG():
         #############################################
 
     def forward(self, tstate):
-        action = self.ANN(tstate)[0]
-        eps = max(self.eps, 0.1)
-        if random.uniform(0.0, 1.0)<self.eps:
-            action += tf.random.normal([self.action_dim], 0.0, 2*eps)
+        action = self.ANN(tstate)[0] + tf.random.normal([self.action_dim], 0.0, 0.222)
         return np.clip(action, -1.0, 1.0)
 
 
@@ -144,8 +141,8 @@ class DDPG():
                     for k in range(t, t+self.n_steps):
                         i=k-t
                         Qt += self.gamma**i*self.cache[k][2]
-                        if i<self.n_steps: Ql += 0.3*0.7**i*Qt
-                    Ql += 0.7**self.n_steps*Qt
+                        if i<self.n_steps: Ql += 0.1*0.9**i*Qt
+                    Ql += 0.9**self.n_steps*Qt
                     self.replay.add_experience([St,At,Ql])
             self.cache = self.cache[-self.n_steps:]
 
@@ -172,7 +169,6 @@ class DDPG():
 
 
     def TD(self):
-        self.eps_step()
         self.St, self.At, self.Ql = self.replay.sample_batch()
         self.NN_update(self.QNN, [self.St, self.At], self.Ql)
         self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St, self.Ql)
