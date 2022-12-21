@@ -1,16 +1,9 @@
 from collections import deque
 import random
 import numpy as np
-import math
-from itertools import repeat
-import tensorflow as tf
-import logging
-tf.get_logger().setLevel(logging.ERROR)
 
-def normalize(val, min, max):
-    return (val - min)/(max - min)
 
-class Record:
+class Replay:
     def __init__(self, max_buffer_size, batch_size):
         self.max_buffer_size = max_buffer_size
         self.batch_size = batch_size
