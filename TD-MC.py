@@ -157,7 +157,7 @@ class DDPG():
     def ANN_update(self, ANN, QNN, opt, St, Qt):
         with tf.GradientTape(persistent=True) as tape:
             A = ANN(St)
-            R = QNN([St, A])-Qt
+            R = 2*(QNN([St, A])-Qt)
         dq_da = tape.gradient(R, A)
         dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da)
         da_dtheta = tape.gradient(A, ANN.trainable_variables, output_gradients=-dq_da)
