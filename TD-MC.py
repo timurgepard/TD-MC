@@ -1,75 +1,27 @@
+
+import multiprocessing as mp
+import ctypes
+from copy import deepcopy
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
-
 from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.initializers import RandomUniform as RU
-from tensorflow.keras.layers import Dense, Input, concatenate
-from tensorflow.keras import Model
-from tensorflow.keras import backend as K
+import tensorflow_probability as tfp
 
 
 import random
 import numpy as np
-#import os
-#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+from buffer import Replay
+from actor_critic import _actor_network,_critic_network
 import math
+
 import gym
-from collections import deque
-import math
+import pybulletgym
+import time
 
 
-
-class Replay:
-    def __init__(self, max_buffer_size, batch_size):
-        self.max_buffer_size = max_buffer_size
-        self.batch_size = batch_size
-        self.buffer = deque(maxlen=max_buffer_size)
-
-    def add_experience(self, transition):
-        self.buffer.append(transition)
-
-    def sample_batch(self):
-        arr = np.array(random.sample(self.buffer, self.batch_size))
-        states_batch = np.vstack(arr[:, 0])
-        actions_batch = np.array(list(arr[:, 1]))
-        Q_batch = np.vstack(arr[:, 2])
-        return states_batch, actions_batch, Q_batch
-
-def atanh(x):
-    return K.abs(x)*K.tanh(100*x)
-
-class _actor_network():
-    def __init__(self, state_dim, action_dim,action_bound_range=1):
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-        self.action_bound_range = action_bound_range
-
-    def model(self):
-        state = Input(shape=self.state_dim, dtype='float64')
-        x = Dense(100, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
-        x = concatenate([state, x])
-        x = Dense(75, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim),1/np.sqrt(400+self.state_dim)))(x)
-        x = concatenate([state, x])
-        out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
-        return Model(inputs=state, outputs=out)
-
-
-class _critic_network():
-    def __init__(self, state_dim, action_dim):
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-
-    def model(self):
-        state = Input(shape=self.state_dim, name='state_input', dtype='float64')
-        x = Dense(100, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
-        action = Input(shape=(self.action_dim,), name='action_input')
-        x = concatenate([x, state, action])
-        x = Dense(75, activation=atanh, kernel_initializer=RU(-1/np.sqrt(400+self.state_dim+self.action_dim),1/np.sqrt(400+self.state_dim+self.action_dim)))(x)
-        x = concatenate([x, state, action])
-        out = Dense(1, activation='linear')(x)
-        return Model(inputs=[state, action], outputs=out)
 
 class DDPG():
     def __init__(self,
@@ -77,11 +29,10 @@ class DDPG():
                  actor=None,
                  critic=None,
                  buffer=None,
-                 divide_rewards_by = 1,
                  max_buffer_size =10000, # maximum transitions to be stored in buffer
                  batch_size =64, # batch size for training actor and critic networks
                  max_time_steps = 1000 ,# no of time steps per epoch
-                 clip_horizon = 125,
+                 clip = 25,
                  discount_factor  = 0.99,
                  explore_time = 2000, # time steps for random actions for exploration
                  actor_learning_rate = 0.0001,
@@ -99,51 +50,59 @@ class DDPG():
         self.act_learning_rate = actor_learning_rate
         self.critic_learning_rate = critic_learning_rate
         self.n_episodes = n_episodes
-        self.rewards_norm = divide_rewards_by
-
         self.env = env
         self.action_dim = action_dim = env.action_space.shape[0]
+        observation_dim = len(env.reset())
+        self.state_dim = state_dim = observation_dim
 
         self.cache = []
         self.x = 0.0
         self.eps = 1.0
 
-        observation_dim = len(env.reset())
-        self.state_dim = state_dim = observation_dim
 
-        self.n_steps = clip_horizon
-        self.max_steps = max_time_steps  ## Time limit for a episode
+        self.n_steps = clip
+        self.max_steps = max_time_steps
+        self.step = 0.01#0.2*self.act_learning_rate
 
         self.ANN_Adam = Adam(self.act_learning_rate)
         self.QNN_Adam = Adam(self.critic_learning_rate)
-
         self.replay = Replay(self.max_buffer_size, self.batch_size)
-
         self.ANN = _actor_network(self.state_dim, self.action_dim).model()
         self.QNN = _critic_network(self.state_dim, self.action_dim).model()
+        self.QNN_t = _critic_network(self.state_dim, self.action_dim).model()
+        self.QNN_t.set_weights(self.QNN.get_weights())
 
+        self.dq_da_rec = []
 
         #############################################
         #----Action based on exploration policy-----#
         #############################################
 
-    def forward(self, tstate):
-        action = self.ANN(tstate)[0] + tf.random.normal([self.action_dim], 0.0, 0.222)
+    def chose_action(self, state):
+        action = self.ANN(state)
+        epsilon = max(self.eps, 0.1)
+        if random.uniform(0.0, 1.0)>self.eps:
+            action = action[0]
+        else:
+            action = action[0] + tf.random.normal([self.action_dim], 0.0, 2*epsilon)
         return np.clip(action, -1.0, 1.0)
 
 
+
     def update_buffer(self):
-        active_steps = len(self.cache) - self.n_steps
+        active_steps =len(self.cache) - self.n_steps
         if active_steps>0:
-            for t, (St,At,Rt) in enumerate(self.cache):
+            for t, (St,At,Rt,St_) in enumerate(self.cache):
                 if t<active_steps:
                     Ql = Qt = 0.0
                     for k in range(t, t+self.n_steps):
-                        i=k-t
-                        Qt += self.gamma**i*self.cache[k][2]
-                        if i<self.n_steps: Ql += 0.1*0.9**i*Qt
-                    Ql += 0.9**self.n_steps*Qt
-                    self.replay.add_experience([St,At,Ql])
+                        i = k-t
+                        Qt = Qt + self.gamma**i*self.cache[k][2]
+                        #if i<self.n_steps: Ql += 0.1*0.9**i*Qt
+                    Qt_ = (Qt - Rt)/self.gamma + self.gamma**self.n_steps*self.cache[t+self.n_steps][2]
+                    #Ql_ = Ql +  0.1*0.9**(self.n_steps-1)*Qt + 0.9**self.n_steps*Qt_
+                    #Ql += 0.9**self.n_steps*Qt
+                    self.replay.add_experience(St,At,Rt,Qt,St_,Qt_)
             self.cache = self.cache[-self.n_steps:]
 
 
@@ -151,11 +110,19 @@ class DDPG():
     # --------------Update Networks--------------#
     #############################################
 
-    def ANN_update(self, ANN, QNN, opt, St, Qt):
+    def ANN_update(self, ANN, QNN, opt, St):
         with tf.GradientTape(persistent=True) as tape:
             A = ANN(St)
-            R = 2*(QNN([St, A])-Qt)
-        dq_da = tape.gradient(R, A)
+            tape.watch(A)
+            Q = QNN([St, A])
+            Q = tf.math.reduce_mean(Q)
+        dq_da = tape.gradient(Q, A)
+        self.dq_da_rec.append(dq_da)
+        if len(self.dq_da_rec)>=11:
+            self.dq_da_rec = self.dq_da_rec[-11:]
+            sma_ = np.mean(self.dq_da_rec[-11:-1], axis=0)
+            sma = np.mean(self.dq_da_rec[-10:], axis=0)
+            dq_da = sma_ + (dq_da - sma)
         dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da)
         da_dtheta = tape.gradient(A, ANN.trainable_variables, output_gradients=-dq_da)
         opt.apply_gradients(zip(da_dtheta, ANN.trainable_variables))
@@ -163,83 +130,102 @@ class DDPG():
 
     def NN_update(self,QNN,input,output):
         with tf.GradientTape() as tape:
-            L = (1/2)*(output-QNN(input))**2
+            e = (1/2)*(output-QNN(input))**2
+            L = tf.math.reduce_mean(e)
         gradient = tape.gradient(L, QNN.trainable_variables)
         self.QNN_Adam.apply_gradients(zip(gradient, QNN.trainable_variables))
 
 
-    def TD(self):
-        self.St, self.At, self.Ql = self.replay.sample_batch()
-        self.NN_update(self.QNN, [self.St, self.At], self.Ql)
-        self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St, self.Ql)
+    def TD_1(self):
+        self.St, self.At, self.rt, self.Qt, self.St_, self.Qt_ = self.replay.sample_batch()
+        self.NN_update(self.QNN_t, [self.St, self.At], self.Qt)
+        self.ANN_update(self.ANN, self.QNN_t, self.ANN_Adam, self.St)
+
+    def TD_2(self):
+        At_ = self.ANN(self.St_)
+        Q_ = self.QNN_t([self.St_, At_])
+        Q = self.rt + self.gamma*(Q_+self.Qt_)/2
+        self.NN_update(self.QNN, [self.St, self.At], Q)
+        self.ANN_update(self.ANN, self.QNN, self.ANN_Adam, self.St)
+        self.QNN_t.set_weights(self.QNN.get_weights())
+
 
 
     def save(self):
         self.ANN.save('./models/actor.h5')
         self.QNN.save('./models/critic_pred.h5')
+        self.QNN_t.save('./models/critic_target.h5')
+
 
 
     def eps_step(self):
-        self.x += 0.05*self.act_learning_rate
+        self.x += self.step
         self.eps = math.exp(-self.x)*math.cos(self.x)
 
 
     def train(self):
         with open('Scores.txt', 'w+') as f:
             f.write('')
+
         state_dim = len(self.env.reset())
-        cnt = 1
-        score_history = []
+        cnt = 0
         self.td = 0
-       
+
+        score_history = []
         for episode in range(self.n_episodes):
             score = 0.0
             state = np.array(self.env.reset(), dtype='float32').reshape(1, state_dim)
             done_cnt = 0
             Rt = 0.0
+            self.eps_step()
             for t in range(self.max_steps+self.n_steps):
-
-                action = self.forward(state)
+                action = self.chose_action(state)
                 state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
                 state_next = np.array(state_next).reshape(1, state_dim)
 
-                if done or t==self.max_steps-1:
+                if done or t>=self.max_steps-1:
                     if Rt == 0.0: Rt = reward
-                    if abs(Rt)>50*abs(score/t):
-                        reward = Rt/self.n_steps
+                    if abs(Rt)>abs(score/t): reward = Rt/self.n_steps
+
                     if done_cnt>self.n_steps:
                         break
                     else:
                         done_cnt += 1
                 else:
-                    #self.env.render(mode="human")
+                    self.env.render(mode="human")
                     cnt += 1
                     score += reward
-                    if cnt%10 == 0:
+
+                    if len(self.cache)>=(10 + self.n_steps) and cnt%10 == 0:
                         self.update_buffer()
 
                     if len(self.replay.buffer)>self.batch_size:
-                        if cnt%(1+self.explore_time//cnt)==0:
-                            self.TD()
+                        if cnt%(1+self.explore_time//(cnt+1))==0:
+                            self.td+=1
+                            if self.td==1:
+                                self.TD_1()
+                            elif self.td==2:
+                                self.TD_2()
+                                self.td=0
 
-
-                self.cache.append([state, action, reward/self.rewards_norm])
+                self.cache.append([state, action, reward, state_next])
                 state = state_next
 
 
             self.update_buffer()
             self.cache = []
+
+
+            if episode>=20 and episode%20==0:
+                self.save()
+
             score += Rt
             score_history.append(score)
-            avg_score = np.mean(score_history[-100:])
+            avg_score = np.mean(score_history[-10:])
             with open('Scores.txt', 'a+') as f:
                 f.write(str(score) + '\n')
 
-
-            if episode>=10 and episode%10==0:
-                self.save()
-
-            print('%d: %f, %f, | %f | step %d' % (episode, score, avg_score, self.eps, cnt))
+            print('%d: %f, %f, | %f | replay size %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer)))
 
 
 
@@ -250,19 +236,20 @@ class DDPG():
 #env = gym.make('BipedalWalkerHardcore-v3').env
 env = gym.make('BipedalWalker-v3').env
 #env = gym.make('HalfCheetahMuJoCoEnv-v0').env
+
 #env = gym.make('HumanoidPyBulletEnv-v0').env
+
 
 ddpg = DDPG(     env , # Gym environment with continous action space
                  actor=None,
                  critic=None,
                  buffer=None,
-                 divide_rewards_by = 10000,
-                 max_buffer_size =10000, # maximum transitions to be stored in buffer
+                 max_buffer_size =2000000, # maximum transitions to be stored in buffer
                  batch_size = 100, # batch size for training actor and critic networks
-                 max_time_steps = 200,# no of time steps per epoch
-                 clip_horizon = 700,
+                 max_time_steps = 2000,# no of time steps per epoch
+                 clip = 700,
                  discount_factor  = 0.99,
-                 explore_time = 2000,
+                 explore_time = 10000,
                  actor_learning_rate = 0.0001,
                  critic_learning_rate = 0.001,
                  n_episodes = 1000000) # no of episodes to run
