@@ -2,15 +2,14 @@ from collections import deque
 import random
 import numpy as np
 
-
 class Replay:
     def __init__(self, max_buffer_size, batch_size):
         self.max_buffer_size = max_buffer_size
         self.batch_size = batch_size
         self.buffer = deque(maxlen=max_buffer_size)
 
-    def add_experience(self, transition):
-        self.buffer.append(transition)
+    def add_experience(self, state, action, reward, Q, next_state, next_Q):
+        self.buffer.append([state, action, reward, Q, next_state, next_Q])
 
     def sample_batch(self):
         arr = np.array(random.sample(self.buffer, self.batch_size))
@@ -22,3 +21,4 @@ class Replay:
         Q_next_batch = np.vstack(arr[:, 5])
 
         return states_batch, actions_batch, rewards_batch, Q_batch, next_states_batch, Q_next_batch
+
