@@ -1,6 +1,3 @@
-import multiprocessing as mp
-import ctypes
-from copy import deepcopy
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
@@ -80,7 +77,8 @@ class Replay:
         rewards_batch = np.vstack(arr[:, 2])
         states_next = np.vstack(arr[:, 3])
         done_batch = np.vstack(arr[:, 4])
-        return states_batch, actions_batch, rewards_batch, states_next, done_batch
+        gamma_batch = np.vstack(arr[:, 5])
+        return states_batch, actions_batch, rewards_batch, states_next, done_batch, gamma_batch
 
 class DDPG():
     def __init__(self,
@@ -121,9 +119,8 @@ class DDPG():
         self.x = 0.0
         self.eps = 1.0
         self.eps = math.exp(-self.x)
-        self.tr_step = 1#round(1/self.eps)
-        self.n_steps = round(2/self.eps)
-
+        self.n_steps = self.tr_step = round(4/self.eps)
+  
         self.max_steps = max_time_steps
         self.tr = 0
         self.tr_ = 0
@@ -149,10 +146,9 @@ class DDPG():
 
     def chose_action(self, state):
         action = self.ANN(state)[0]
-        epsilon = max(self.eps, 0.05)
         if random.uniform(0.0, 1.0)<self.eps:
             #action += self.action_noise.noise()
-            action += tf.random.normal([self.action_dim], 0.0, 2*epsilon)
+            action += tf.random.normal([self.action_dim], 0.0, 2*self.eps)
         return np.clip(action, -1.0, 1.0)
 
     #############################################
@@ -185,11 +181,11 @@ class DDPG():
 
     def TD(self):
         self.tr += 1
-        St, At, Rt, St_, d = self.replay.sample()
+        St, At, Rt, St_, d, gamma = self.replay.sample()
         self.update_target()
         A_ = self.ANN_t(St_)
         Q_ = self.QNN_t([St_, A_])
-        Q = Rt + (1-d)*self.gamma**(self.n_steps)*Q_
+        Q = Rt + (1-d)*gamma*Q_
         Q += np.random.normal(0.0, 0.01*np.std(Q), Q.shape)
         self.NN_update(self.QNN, self.QNN_opt, [St, At], Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, St)
@@ -217,8 +213,8 @@ class DDPG():
 
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.8*math.exp(-self.x)+0.2
-        self.n_steps = round(2/self.eps)
+        self.eps = 0.95*math.exp(-self.x)+0.05
+        self.n_steps = self.tr_step = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -252,7 +248,7 @@ class DDPG():
                   score += reward
                   cnt += 1
 
-                self.replay.add_experience([state, action, reward, state_next, end])
+                self.replay.add_experience([state, action, reward, state_next, end, self.gamma])
                 if len(self.replay.buffer)>1 and t>=self.n_steps:
                     Return = 0.0
                     for t in range(-self.n_steps, 0):
@@ -260,6 +256,7 @@ class DDPG():
                     self.replay.buffer[-self.n_steps][2] = Return
                     self.replay.buffer[-self.n_steps][3] = state_next
                     self.replay.buffer[-self.n_steps][4] = done
+                    self.replay.buffer[-self.n_steps][5] = self.gamma**(self.n_steps)
                     if len(self.replay.buffer)>self.batch_size:
                         if cnt%(self.tr_step+self.explore_time//cnt)==0:
                             self.TD()
@@ -293,11 +290,11 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  divide_rewards_by = 1,
-                 max_buffer_size =1000000, # maximum transitions to be stored in buffer
+                 max_buffer_size =256000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  discount_factor  = 0.99,
-                 explore_time = 10000,
+                 explore_time = 12800,
                  learning_rate = 0.002,
                  n_episodes = 1000000) # no of episodes to run
 
