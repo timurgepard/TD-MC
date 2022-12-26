@@ -1,8 +1,12 @@
+import multiprocessing as mp
+import ctypes
+from copy import deepcopy
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
 from tensorflow.keras.optimizers import Adam, SGD
 from collections import deque
+
 
 import random
 import numpy as np
@@ -118,7 +122,7 @@ class DDPG():
         self.eps = 1.0
         self.eps = math.exp(-self.x)
         self.tr_step = 1#round(1/self.eps)
-        self.n_steps = round(1/self.eps)
+        self.n_steps = round(2/self.eps)
 
         self.max_steps = max_time_steps
         self.tr = 0
@@ -185,7 +189,7 @@ class DDPG():
         self.update_target()
         A_ = self.ANN_t(St_)
         Q_ = self.QNN_t([St_, A_])
-        Q = Rt + (1-d)*self.gamma**(self.n_steps+1)*Q_
+        Q = Rt + (1-d)*self.gamma**(self.n_steps)*Q_
         Q += np.random.normal(0.0, 0.01*np.std(Q), Q.shape)
         self.NN_update(self.QNN, self.QNN_opt, [St, At], Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, St)
@@ -214,7 +218,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.8*math.exp(-self.x)+0.2
-        self.n_steps = round(1/self.eps)
+        self.n_steps = round(2/self.eps)
         self.tr_ = tr
 
 
@@ -250,12 +254,12 @@ class DDPG():
 
                 self.replay.add_experience([state, action, reward, state_next, end])
                 if len(self.replay.buffer)>1 and t>=self.n_steps:
-                    Return, step_t0 = 0.0, -self.n_steps-1
-                    for t in range(step_t0, 0):
+                    Return = 0.0
+                    for t in range(-self.n_steps, 0):
                        Return += self.gamma**(t+2)*self.replay.buffer[t][2]
-                    self.replay.buffer[step_t0][2] = Return
-                    self.replay.buffer[step_t0][3] = state_next
-                    self.replay.buffer[step_t0][4] = done
+                    self.replay.buffer[-self.n_steps][2] = Return
+                    self.replay.buffer[-self.n_steps][3] = state_next
+                    self.replay.buffer[-self.n_steps][4] = done
                     if len(self.replay.buffer)>self.batch_size:
                         if cnt%(self.tr_step+self.explore_time//cnt)==0:
                             self.TD()
