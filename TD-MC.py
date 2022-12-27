@@ -116,7 +116,7 @@ class DDPG():
         self.x = 0.0
         self.eps = math.exp(-self.x)
         self.tr_step = 2
-        self.n_steps = round(4/self.eps)
+        self.n_steps = 64#round(4/self.eps)
 
 
         self.max_steps = max_time_steps
@@ -211,7 +211,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        self.n_steps = round(4/self.eps)
+        #self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
