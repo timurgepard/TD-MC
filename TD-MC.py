@@ -103,7 +103,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = 0.01*learning_rate
+        self.dist_learning_rate = 0.05*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
@@ -116,7 +116,8 @@ class DDPG():
         self.x = 0.0
         self.eps = math.exp(-self.x)
         self.tr_step = 2
-        self.n_steps = 64#round(4/self.eps)
+        self.n_steps = round(4/self.eps)
+        self.horizon = 64
 
 
         self.max_steps = max_time_steps
@@ -211,7 +212,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        #self.n_steps = round(4/self.eps)
+        self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -249,12 +250,12 @@ class DDPG():
 
 
                 self.replay.buffer.append([state, action, reward, reward, state_next, self.gamma])
-                if len(self.replay.buffer)>=1 and t>=1:
+                if len(self.replay.buffer)>=1 and t>=self.n_steps:
                     Return = 0.0
-                    t_back = min(t, self.n_steps)
+                    t_back = min(t, self.horizon)
                     for ti in range(-1, -t_back):
                         i = -(ti+1) # 0,1,2...
-                        Return += self.gamma**i*self.replay.buffer[ti][2]
+                        Return = self.gamma**i*Return + self.replay.buffer[ti][2]
                         self.replay.buffer[ti][3] = Return
                         self.replay.buffer[ti][4] = state_next
                         self.replay.buffer[ti][5] = self.gamma**(i+1) #i+1: 1, 2, 3
@@ -271,16 +272,16 @@ class DDPG():
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
-            if episode>=50 and episode%50==0:
-                self.save()
-                print('%d: %f, %f, | %f | replay size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
+            #if episode>=50 and episode%50==0:
+                #self.save()
+            print('%d: %f, %f, | %f | replay size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
                 #self.action_noise.reset()
 
 
-#env = gym.make('Pendulum-v1').env
+env = gym.make('Pendulum-v1').env
 #env = gym.make('LunarLanderContinuous-v2').env
 #env = gym.make('BipedalWalker-v3').env
-env = gym.make('HumanoidBulletEnv-v0').env
+#env = gym.make('HumanoidBulletEnv-v0').env
 
 
 ddpg = DDPG(     env , # Gym environment with continous action space
