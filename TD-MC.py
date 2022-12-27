@@ -14,14 +14,14 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import math
 
 import gym
-#import pybulletgym
+import pybullet_envs
 import time
 
-from ou_noise import OUActionNoise
+#from ou_noise import OUActionNoise
 
 from tensorflow.keras.initializers import RandomUniform as RU
 from tensorflow.keras.layers import Dense, Input, concatenate
-from tensorflow_addons.layers import NoisyDense
+#from tensorflow_addons.layers import NoisyDense
 from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 
@@ -67,10 +67,6 @@ class Replay:
         self.batch_size = batch_size
         self.buffer = deque(maxlen=max_buffer_size)
 
-    def add_experience(self, transition):
-        self.buffer.append(transition)
-
-
     def sample(self):
         arr = np.random.default_rng().choice(self.buffer, size=self.batch_size, replace=False)
         states_batch = np.vstack(arr[:, 0])
@@ -107,7 +103,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = 0.05*learning_rate
+        self.dist_learning_rate = 0.01*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
@@ -118,10 +114,9 @@ class DDPG():
 
         self.cache = []
         self.x = 0.0
-        self.eps = 1.0
         self.eps = math.exp(-self.x)
         self.tr_step = 2
-        self.n_steps = 128
+        self.n_steps = round(4/self.eps)
 
 
         self.max_steps = max_time_steps
@@ -141,7 +136,7 @@ class DDPG():
         self.QNN_t.set_weights(self.QNN.get_weights())
         self.dq_da_rec, self.sma_ = deque(maxlen=10), 0.0
 
-        self.action_noise = OUActionNoise(action_dim)
+        #self.action_noise = OUActionNoise(action_dim)
 
         #############################################
         #----Action based on exploration policy-----#
@@ -216,7 +211,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        #self.n_steps = self.tr_step = round(16/self.eps)
+        self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -247,26 +242,25 @@ class DDPG():
                     else:
                         end_cnt += 1
                 else:
-                    self.env.render(mode="human")
+                    #self.env.render(mode="human")
                     score += reward
                     cnt += 1
 
-                    if len(self.replay.buffer)>self.batch_size and t>=1:
-                        if cnt%(self.tr_step+self.explore_time//cnt)==0:
-                            self.TD()
 
-                self.replay.add_experience([state, action, reward, 0.0, state_next, self.gamma])
+
+                self.replay.buffer.append([state, action, reward, reward, state_next, self.gamma])
                 if len(self.replay.buffer)>=1 and t>=1:
-                    Return, Rt = 0.0, []
+                    Return = 0.0
                     t_back = min(t, self.n_steps)
-                    for ti in range(-t_back, 0):
-                        i = (ti+t_back)
+                    for ti in range(-1, -t_back):
+                        i = -(ti+1) # 0,1,2...
                         Return += self.gamma**i*self.replay.buffer[ti][2]
-                        if ti<-1:
-                            self.replay.buffer[-i-2][3] = Return
-                            self.replay.buffer[-i-2][4] = state_next
-                            self.replay.buffer[-i-2][5] = self.gamma**(i+1)
-
+                        self.replay.buffer[ti][3] = Return
+                        self.replay.buffer[ti][4] = state_next
+                        self.replay.buffer[ti][5] = self.gamma**(i+1) #i+1: 1, 2, 3
+                if len(self.replay.buffer)>self.batch_size:
+                    if cnt%(self.tr_step+self.explore_time//cnt)==0: #starts slowly increasing training till explore time
+                        self.TD()
 
 
                 state = state_next
@@ -277,20 +271,16 @@ class DDPG():
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
-            if episode>=10 and episode%10==0:
+            if episode>=50 and episode%50==0:
                 self.save()
-            print('%d: %f, %f, | %f | replay size %d | steps' % (episode, score, avg_score, self.eps, len(self.replay.buffer)), self.n_steps)
+                print('%d: %f, %f, | %f | replay size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
                 #self.action_noise.reset()
 
 
 #env = gym.make('Pendulum-v1').env
 #env = gym.make('LunarLanderContinuous-v2').env
-#env = gym.make('HumanoidMuJoCoEnv-v0').env
-#env = gym.make('BipedalWalkerHardcore-v3').env
-env = gym.make('BipedalWalker-v3').env
-#env = gym.make('HalfCheetahMuJoCoEnv-v0').env
-
-#env = gym.make('HumanoidPyBulletEnv-v0').env
+#env = gym.make('BipedalWalker-v3').env
+env = gym.make('HumanoidBulletEnv-v0').env
 
 
 ddpg = DDPG(     env , # Gym environment with continous action space
