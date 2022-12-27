@@ -3,7 +3,7 @@ import logging
 tf.get_logger().setLevel(logging.ERROR)
 from tensorflow.keras.optimizers import Adam, SGD
 from collections import deque
-
+import itertools
 
 import random
 import numpy as np
@@ -116,7 +116,7 @@ class DDPG():
         self.x = 0.0
         self.eps = math.exp(-self.x)
         self.tr_step = 2
-        self.n_steps = round(4/self.eps)
+        self.n_steps = 4#round(4/self.eps)
         self.horizon = 64
 
 
@@ -212,7 +212,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        self.n_steps = round(4/self.eps)
+        #self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -222,33 +222,31 @@ class DDPG():
             #f.write('')
         state_dim = len(self.env.reset())
         cnt, score_history = 0, []
-        self.td = 0
         for episode in range(self.n_episodes):
             score = 0.0
-            end, end_cnt = False, 0
+            end, end_cnt, terminal_reward = False, 0, 0.0
             state = np.array(self.env.reset(), dtype='float32').reshape(1, state_dim)
             for t in range(self.max_steps+self.n_steps):
 
-                action = self.chose_action(state)
-                state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
-                state_next = np.array(state_next).reshape(1, state_dim)
-                reward /= self.rewards_norm
-
-                if done: end = True
-                if end or t>=self.max_steps-1:
-                    if end_cnt==0.0: score += reward
-                    if end: reward = reward/self.n_steps
-                    if end_cnt>=self.n_steps:
-                        break
-                    else:
-                        end_cnt += 1
-                else:
+                if not end:
                     #self.env.render(mode="human")
+                    action = self.chose_action(state)
+                    state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
+                    state_next = np.array(state_next).reshape(1, state_dim)
+                    reward /= self.rewards_norm
+                    if done: end = True
                     score += reward
                     cnt += 1
-
-
-
+                elif end or t>=self.max_steps-1:
+                    if end_cnt==0.0:
+                        t_last = t
+                    if end: reward =reward/self.horizon
+                    if end_cnt>=self.n_steps:
+                        itertools.islice(self.replay.buffer, t_last+1, t_last+self.horizon)
+                        break
+                    end_cnt += 1
+                
+                 
                 self.replay.buffer.append([state, action, reward, reward, state_next, self.gamma])
                 if len(self.replay.buffer)>=1 and t>=self.n_steps:
                     Return = 0.0
@@ -263,8 +261,8 @@ class DDPG():
                     if cnt%(self.tr_step+self.explore_time//cnt)==0: #starts slowly increasing training till explore time
                         self.TD()
 
-
-                state = state_next
+                if not end: state = state_next
+                
 
             self.eps_step(self.tr)
             score_history.append(score)
@@ -272,16 +270,16 @@ class DDPG():
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
-            #if episode>=50 and episode%50==0:
+            if episode>=10 and episode%10==0:
                 #self.save()
-            print('%d: %f, %f, | %f | replay size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
+                print('%d: %f, %f, | %f | replay size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
                 #self.action_noise.reset()
 
 
-env = gym.make('Pendulum-v1').env
+#env = gym.make('Pendulum-v1').env
 #env = gym.make('LunarLanderContinuous-v2').env
 #env = gym.make('BipedalWalker-v3').env
-#env = gym.make('HumanoidBulletEnv-v0').env
+env = gym.make('HumanoidBulletEnv-v0').env
 
 
 ddpg = DDPG(     env , # Gym environment with continous action space
