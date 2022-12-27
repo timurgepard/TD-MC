@@ -212,7 +212,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        self.n_steps = round(4/self.eps)
+        #self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -247,8 +247,8 @@ class DDPG():
                             del self.replay.buffer[-1]
                         break
                     end_cnt += 1
-                
-                 
+
+
                 self.replay.buffer.append([state, action, reward, reward, state_next, self.gamma])
                 if len(self.replay.buffer)>=1 and t>=self.n_steps:
                     Return = 0.0
@@ -262,7 +262,7 @@ class DDPG():
 
 
                 if not end: state = state_next
-                
+
 
             self.eps_step(self.tr)
             score_history.append(score)
