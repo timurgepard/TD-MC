@@ -3,7 +3,7 @@ import logging
 tf.get_logger().setLevel(logging.ERROR)
 from tensorflow.keras.optimizers import Adam, SGD
 from collections import deque
-import itertools
+
 
 import random
 import numpy as np
@@ -212,7 +212,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        #self.n_steps = round(4/self.eps)
+        self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -234,15 +234,17 @@ class DDPG():
                     state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
                     state_next = np.array(state_next).reshape(1, state_dim)
                     reward /= self.rewards_norm
-                    if done: end = True
+                    if done or t>=self.max_steps-1: end = True
                     score += reward
                     cnt += 1
-                elif end or t>=self.max_steps-1:
-                    if end_cnt==0.0:
-                        t_last = t
-                    if end: reward =reward/self.horizon
-                    if end_cnt>=self.n_steps:
-                        itertools.islice(self.replay.buffer, t_last+1, t_last+self.horizon)
+
+                    if len(self.replay.buffer)>self.batch_size and cnt%(self.tr_step+self.explore_time//cnt)==0:
+                        self.TD()
+                else:
+                    if done: reward=reward/self.horizon
+                    if end_cnt>=self.horizon:
+                        for i in range(self.horizon-1):
+                            del self.replay.buffer[-1]
                         break
                     end_cnt += 1
                 
@@ -257,9 +259,7 @@ class DDPG():
                         self.replay.buffer[ti][3] = Return
                         self.replay.buffer[ti][4] = state_next
                         self.replay.buffer[ti][5] = self.gamma**(i+1) #i+1: 1, 2, 3
-                if len(self.replay.buffer)>self.batch_size:
-                    if cnt%(self.tr_step+self.explore_time//cnt)==0: #starts slowly increasing training till explore time
-                        self.TD()
+
 
                 if not end: state = state_next
                 
@@ -270,7 +270,7 @@ class DDPG():
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
-            if episode>=10 and episode%10==0:
+            if episode>=50 and episode%50==0:
                 #self.save()
                 print('%d: %f, %f, | %f | replay size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
                 #self.action_noise.reset()
