@@ -66,9 +66,10 @@ class Replay:
         self.max_buffer_size = max_buffer_size
         self.batch_size = batch_size
         self.buffer = deque(maxlen=max_buffer_size)
+        self.pool = deque(maxlen=2*max_buffer_size)
 
     def sample(self):
-        arr = np.random.default_rng().choice(self.buffer, size=self.batch_size, replace=False)
+        arr = np.random.default_rng().choice(self.pool, size=self.batch_size, replace=False)
         states_batch = np.vstack(arr[:, 0])
         actions_batch = np.array(list(arr[:, 1]))
         #rewards_batch = np.vstack(arr[:, 2])
@@ -212,7 +213,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25
-        #self.n_steps = round(4/self.eps)
+        self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
 
@@ -233,9 +234,9 @@ class DDPG():
                     action = self.chose_action(state)
                     state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
                     state_next = np.array(state_next).reshape(1, state_dim)
+                    score += reward
                     reward /= self.rewards_norm
                     if done or t>=self.max_steps-1: end = True
-                    score += reward
                     cnt += 1
 
                     if len(self.replay.buffer)>self.batch_size and cnt%(self.tr_step+self.explore_time//cnt)==0:
@@ -253,12 +254,13 @@ class DDPG():
                 if len(self.replay.buffer)>=1 and t>=self.n_steps:
                     Return = 0.0
                     t_back = min(t, self.horizon)
-                    for ti in range(-1, -t_back):
+                    for ti in range(-1, -t_back, -1):
                         i = -(ti+1) # 0,1,2...
                         Return = self.gamma**i*Return + self.replay.buffer[ti][2]
                         self.replay.buffer[ti][3] = Return
                         self.replay.buffer[ti][4] = state_next
                         self.replay.buffer[ti][5] = self.gamma**(i+1) #i+1: 1, 2, 3
+                        self.replay.pool.append(self.replay.buffer[ti])
 
 
                 if not end: state = state_next
