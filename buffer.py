@@ -17,7 +17,7 @@ import gym
 import pybullet_envs
 import time
 
-from ou_noise import OUActionNoise
+#from ou_noise import OUActionNoise
 
 from tensorflow.keras.initializers import RandomUniform as RU
 from tensorflow.keras.layers import Dense, Input, concatenate
@@ -73,7 +73,7 @@ class Replay:
         #indices = np.random.default_rng().choice(indexes, size=self.batch_size, replace=False)
         #arr = np.array([self.buffer[indx-1] for indx in indices])
         #weights = np.exp(-indices).reshape(-1,1)
-        arr = np.random.default_rng().choice(self.pool, size=self.batch_size, replace=False)
+        arr = np.random.default_rng().choice(self.buffer, size=self.batch_size, replace=False)
         states_batch = np.vstack(arr[:, 0])
         actions_batch = np.array(list(arr[:, 1]))
         #rewards_batch = np.vstack(arr[:, 2])
@@ -109,7 +109,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = learning_rate**2
+        self.dist_learning_rate = 0.01*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
@@ -123,7 +123,7 @@ class DDPG():
         self.eps = math.exp(-self.x)
         self.tr_step = 2
         self.n_steps = round(4/self.eps)
-        self.horizon = 16
+        self.horizon = 64
 
 
         self.max_steps = max_time_steps
@@ -136,11 +136,13 @@ class DDPG():
         self.QNN_opt = Adam(self.critic_learning_rate)
         self.replay = Replay(self.max_buffer_size, self.batch_size)
         self.ANN = _actor_network(self.state_dim, self.action_dim).model()
+        self.ANN_t = _actor_network(self.state_dim, self.action_dim).model()
         self.QNN = _critic_network(self.state_dim, self.action_dim).model()
         self.QNN_t = _critic_network(self.state_dim, self.action_dim).model()
+        self.ANN_t.set_weights(self.ANN.get_weights())
         self.QNN_t.set_weights(self.QNN.get_weights())
         self.dq_da_rec, self.sma_ = deque(maxlen=10), 0.0
-        self.action_noise = OUActionNoise(action_dim)
+        #self.action_noise = OUActionNoise(action_dim)
 
         #############################################
         #----Action based on exploration policy-----#
@@ -148,8 +150,8 @@ class DDPG():
 
     def chose_action(self, state):
         action = self.ANN(state)[0]
-        if random.uniform(0.0, 1.0)<self.eps:
-            action += self.action_noise.noise() + tf.random.normal([self.action_dim], 0.0, 2*self.eps)
+        #if random.uniform(0.0, 1.0)<self.eps:
+        action += tf.random.normal([self.action_dim], 0.0, self.eps)
         return np.clip(action, -1.0, 1.0)
 
     #############################################
@@ -176,6 +178,7 @@ class DDPG():
     def NN_update(self,QNN,opt,input,output):
         with tf.GradientTape() as tape:
             L = (1/2)*(output-QNN(input))**2
+            #L = e*tf.math.tanh(e/2)
         gradient = tape.gradient(L, QNN.trainable_variables)
         opt.apply_gradients(zip(gradient, QNN.trainable_variables))
 
@@ -183,8 +186,10 @@ class DDPG():
     def TD(self):
         self.tr += 1
         St, At, Rt, St_, At_, gamma = self.replay.sample()
-        self.tow_update(self.QNN_t, self.QNN, 0.001)
-        Q_ = self.QNN_t([St_, At_])
+        #self.tow_update(self.ANN_t, self.ANN, 0.005)
+        #self.tow_update(self.QNN_t, self.QNN, 0.005)
+        #A_ = self.ANN_t(St)
+        Q_ = self.QNN([St_, At_])
         Q = Rt + gamma*Q_
         self.NN_update(self.QNN, self.QNN_opt, [St, At], Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, St, At)
@@ -202,6 +207,7 @@ class DDPG():
 
     def save(self):
         self.ANN.save('./models/actor.h5')
+        self.ANN_t.save('./models/actor.h5')
         self.QNN.save('./models/critic_pred.h5')
         self.QNN_t.save('./models/critic_target.h5')
 
@@ -224,7 +230,7 @@ class DDPG():
             end, end_cnt, terminal_reward = False, 0, 0.0
             state = np.array(self.env.reset(), dtype='float32').reshape(1, state_dim)
             action = self.chose_action(state)
-            for t in range(self.max_steps+self.n_steps):
+            for t in range(self.max_steps+self.horizon):
                 if not end:
                     #self.env.render(mode="human")
                     state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
@@ -237,16 +243,19 @@ class DDPG():
                     if len(self.replay.buffer)>self.batch_size and cnt%(self.tr_step+self.explore_time//cnt)==0:
                         self.TD()
 
-                if end or t>=self.max_steps-1:
-                    if done: reward=reward/self.horizon
-                    if end_cnt>=self.horizon:
-                        for i in range(self.horizon-1):
-                            del self.replay.buffer[-1]
-                        break
-                    end_cnt += 1
-
+                if done: reward=reward/self.horizon
                 action_next = self.chose_action(state_next)
                 self.replay.buffer.append([state, action, reward, reward, state_next, action_next, self.gamma])
+
+                if end or t>=self.max_steps-1:
+                    if end_cnt>=self.horizon:
+                        for i in range(self.horizon):
+                            del self.replay.buffer[-1]
+                        #self.replay.buffer += self.replay.pool
+                        break
+                    end_cnt += 1
+                    
+
 
                 if len(self.replay.buffer)>=1 and t>=self.n_steps:
                     Return = 0.0
@@ -258,9 +267,8 @@ class DDPG():
                         self.replay.buffer[ti][4] = state_next
                         self.replay.buffer[ti][5] = action_next
                         self.replay.buffer[ti][6] = self.gamma**(i+1) #i+1: 1, 2, 3
-                        #if not end and t<self.max_steps-1:
-                        self.replay.pool.append(self.replay.buffer[ti])
-                    #self.replay.pool.append(self.replay.buffer[-t_back])
+                        #if not end and t<=self.max_steps-1:
+                            #self.replay.pool.append(self.replay.buffer[ti])
 
 
 
@@ -277,8 +285,8 @@ class DDPG():
 
             if episode>=50 and episode%50==0:
                 #self.save()
-                print('%d: %f, %f, | %f | pool size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.pool), self.n_steps))
-                self.action_noise.reset()
+                print('%d: %f, %f, | %f | buffer size %d | step %d' % (episode, score, avg_score, self.eps, len(self.replay.buffer), self.n_steps))
+                #self.action_noise.reset()
 
 
 #env = gym.make('Pendulum-v1').env
