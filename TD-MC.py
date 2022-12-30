@@ -1,4 +1,86 @@
+import tensorflow as tf
+import logging
+tf.get_logger().setLevel(logging.ERROR)
+from tensorflow.keras.optimizers import Adam, SGD
+from collections import deque
 
+
+import random
+import numpy as np
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import math
+
+import gym
+import pybullet_envs
+import time
+
+from collections import deque
+
+from tensorflow.keras.initializers import RandomUniform as RU
+from tensorflow.keras.layers import Dense, Input, concatenate, LayerNormalization
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+
+class Replay:
+    def __init__(self, max_buffer_size, batch_size):
+        self.max_buffer_size = max_buffer_size
+        self.batch_size = batch_size
+        self.buffer = deque(maxlen=max_buffer_size)
+        self.pool = deque(maxlen=max_buffer_size)
+
+    def add_experience(self, transition):
+        self.buffer.append(transition)
+
+
+    def sample(self):
+        arr = np.random.default_rng().choice(self.pool, size=self.batch_size, replace=False)
+        states_batch = np.vstack(arr[:, 0])
+        actions_batch = np.array(list(arr[:, 1]))
+        #rewards_batch = np.vstack(arr[:, 2])
+        return_batch = np.vstack(arr[:, 3])
+        states_next = np.vstack(arr[:, 4])
+        gamma_batch = np.vstack(arr[:, 5])
+        done_batch = np.vstack(arr[:, 6])
+        return states_batch, actions_batch, return_batch, states_next, gamma_batch, done_batch
+
+  
+
+def atanh(x):
+    return K.abs(x)*K.tanh(x)
+
+class _actor_network():
+    def __init__(self, state_dim, action_dim,action_bound_range=1):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.action_bound_range = action_bound_range
+
+    def model(self):
+        state = Input(shape=self.state_dim, dtype='float64')
+        x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        x = concatenate([x, state])
+        x = Dense(80, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim),1/np.sqrt(128+self.state_dim)))(x)
+        x = concatenate([x, state])
+        out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
+        return Model(inputs=state, outputs=out)
+
+
+class _critic_network():
+    def __init__(self, state_dim, action_dim):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+
+    def model(self):
+        state = Input(shape=self.state_dim, name='state_input', dtype='float64')
+        x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        action = Input(shape=(self.action_dim,), name='action_input')
+        x = concatenate([x, state, action])
+        x = Dense(80, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim+self.action_dim),1/np.sqrt(128+self.state_dim+self.action_dim)))(x)
+        x = concatenate([x, state, action])
+        out = Dense(1, activation='linear')(x)
+        return Model(inputs=[state, action], outputs=out)
+  
+  
 
 
 
@@ -135,7 +217,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.5*(math.exp(-self.x)+1.0)
-        self.tr_step = round(1/self.eps)
+        #self.tr_step = round(1/self.eps)
         self.tr_ = tr
 
 
@@ -159,9 +241,9 @@ class DDPG():
                 reward /= self.rewards_norm
 
                 self.replay.buffer.append([state, action, reward, reward, state_next, self.gamma, done])
-                if len(self.replay.buffer)>=1 and t>=4:
+                if len(self.replay.buffer)>=1 and t>=8:
                     Return = 0.0
-                    for ti in range(-1, -4, -1):
+                    for ti in range(-1, -8, -1):
                         Return = self.gamma*Return + self.replay.buffer[ti][2]
                         self.replay.buffer[ti][3] = Return
                         self.replay.buffer[ti][4] = state_next
@@ -217,7 +299,7 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  max_time_steps = 200,# no of time steps per epoch
                  discount_factor  = 0.99,
                  explore_time = 10000,
-                 learning_rate = 0.002,
+                 learning_rate = 0.01,
                  n_episodes = 1000000) # no of episodes to run
 
 
