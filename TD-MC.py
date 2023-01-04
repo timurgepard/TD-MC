@@ -160,7 +160,7 @@ class DDPG():
     def chose_action(self, state):
         action, st_dev = self.ANN_t(state)
         action =  tf.random.normal([self.action_dim], action[0], st_dev[0])
-        self.std.append(st_dev[0])
+        self.std.append(st_dev[0]) #logging
         return np.tanh(action), st_dev
 
     #############################################
@@ -231,7 +231,7 @@ class DDPG():
 
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.8*math.exp(-self.x)+0.2
+        self.eps = 0.75*math.exp(-self.x)+0.25
         self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
