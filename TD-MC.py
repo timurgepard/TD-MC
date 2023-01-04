@@ -231,7 +231,7 @@ class DDPG():
 
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.75*math.exp(-self.x)+0.25
+        self.eps = 0.8*math.exp(-self.x)+0.2
         self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
@@ -318,12 +318,12 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  divide_rewards_by = 1,
-                 max_buffer_size =128000, # maximum transitions to be stored in buffer
-                 batch_size = 128, # batch size for training actor and critic networks
+                 max_buffer_size =256000, # maximum transitions to be stored in buffer
+                 batch_size = 256, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  discount_factor  = 0.99,
                  explore_time = 6400,
-                 learning_rate = 0.001,
+                 learning_rate = 0.002,
                  n_episodes = 1000000) # no of episodes to run
 
 
