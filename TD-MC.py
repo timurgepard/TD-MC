@@ -231,7 +231,7 @@ class DDPG():
 
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.8*math.exp(-self.x)+0.2
+        self.eps = 0.75*math.exp(-self.x)+0.25
         self.n_steps = round(4/self.eps)
         self.tr_ = tr
 
@@ -272,7 +272,7 @@ class DDPG():
                         self.replay.buffer[ti][7] = done
                         self.replay.pool.append(self.replay.buffer[ti])
 
-                    if len(self.replay.buffer)>10*self.batch_size:
+                    if len(self.replay.pool)>10*self.batch_size:
                         if cnt%(self.tr_step+self.explore_time//cnt)==0:
                             self.td += 1
                             if self.td==1:
@@ -285,18 +285,18 @@ class DDPG():
                     break
                 else:
                     state = state_next
-                    #action = action_next
+
 
             self.eps_step(self.tr)
             score_history.append(score)
+            score_history = score_history[-100:]
             t_history.append(t)
-            avg_score = np.mean(score_history[-100:])
-            avg_t = np.mean(t_history[-100:])
+            t_history = t_history[-100:]
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
-            if episode>=100 and episode%100==0:
-                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, avg_score, self.eps, np.mean(self.std[10]), len(self.replay.buffer), len(self.replay.pool), avg_t, cnt))
+            if episode>=20 and episode%20==0:
+                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history), self.eps, np.mean(self.std[10]), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history), cnt))
 
 
                 #self.save()
