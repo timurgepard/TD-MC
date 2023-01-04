@@ -109,7 +109,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = 0.01*learning_rate
+        self.dist_learning_rate = 0.02*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
