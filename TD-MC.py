@@ -2,24 +2,22 @@ import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
 from tensorflow.keras.optimizers import Adam, SGD
-from collections import deque
-
+from tensorflow.keras.initializers import RandomUniform as RU
+from tensorflow.keras.layers import Dense, Input, concatenate, LayerNormalization
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
 
 import random
 import numpy as np
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import math
+from collections import deque
 
 import gym
 import pybullet_envs
 
-from collections import deque
 
-from tensorflow.keras.initializers import RandomUniform as RU
-from tensorflow.keras.layers import Dense, Input, concatenate, LayerNormalization
-from tensorflow.keras import Model
-from tensorflow.keras import backend as K
 
 
 
@@ -111,7 +109,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = 0.1*learning_rate
+        self.dist_learning_rate = 0.01*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
@@ -289,26 +287,15 @@ class DDPG():
 
             self.eps_step(self.tr)
             score_history.append(score)
-            score_history = score_history[-100:]
             t_history.append(t)
-            t_history = t_history[-100:]
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
-            if episode>=20 and episode%20==0:
-                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history), self.eps, np.mean(self.std[10]), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history), cnt))
-
-
+            if episode>=10 and episode%10==0:
+                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std[10]), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
                 #self.save()
 
 
-
-#env = gym.make('Pendulum-v0').env
-#env = gym.make('LunarLanderContinuous-v2').env
-#env = gym.make('HumanoidMuJoCoEnv-v0').env
-#env = gym.make('BipedalWalkerHardcore-v3').env
-#env = gym.make('BipedalWalker-v3').env
-#env = gym.make('HalfCheetahMuJoCoEnv-v0').env
 
 env = gym.make('HumanoidBulletEnv-v0').env
 
@@ -318,8 +305,8 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  divide_rewards_by = 1,
-                 max_buffer_size =256000, # maximum transitions to be stored in buffer
-                 batch_size = 256, # batch size for training actor and critic networks
+                 max_buffer_size =128000, # maximum transitions to be stored in buffer
+                 batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  discount_factor  = 0.99,
                  explore_time = 6400,
