@@ -1,7 +1,7 @@
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD
 from collections import deque
 
 
@@ -241,7 +241,7 @@ class DDPG():
         #with open('Scores.txt', 'w+') as f:
             #f.write('')
         state_dim = len(self.env.reset())
-        cnt, score_history = 0, []
+        cnt, score_history, t_history = 0, [], []
         self.td = 0
 
         for episode in range(self.n_episodes):
@@ -288,9 +288,10 @@ class DDPG():
                     #action = action_next
 
             self.eps_step(self.tr)
-            score_history.append([score, t])
-            avg_score = np.mean(score_history[0][-100:])
-            avg_t = np.mean(score_history[1][-100:])
+            score_history.append(score)
+            t_history.append(t)
+            avg_score = np.mean(score_history[-100:])
+            avg_t = np.mean(t_history[-100:])
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
 
