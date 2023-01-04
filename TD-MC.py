@@ -1,7 +1,7 @@
 import tensorflow as tf
 import logging
 tf.get_logger().setLevel(logging.ERROR)
-from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomUniform as RU
 from tensorflow.keras.layers import Dense, Input, concatenate, LayerNormalization
 from tensorflow.keras import Model
