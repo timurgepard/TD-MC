@@ -152,9 +152,9 @@ class DDPG():
         #############################################
 
 
-    def add_noise(self, ANN_t, ANN, scale):
-        ANN_t.set_weights(ANN.get_weights())
-        for layer in ANN_t.trainable_weights:
+    def add_noise(self, ANN_, ANN, scale):
+        ANN_.set_weights(ANN.get_weights())
+        for layer in ANN_.trainable_weights:
             layer.assign_add(np.random.normal(loc=0.0, scale=0.1*scale, size=layer.shape))
 
 
@@ -211,7 +211,6 @@ class DDPG():
     def TD2(self):
         self.tr += 1
         self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At, self.st], self.Q)
-        #self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At], self.Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, self.St)
         self.add_noise(self.ANN_,self.ANN, self.eps)
 
@@ -254,7 +253,7 @@ class DDPG():
 
 
             for t in range(self.max_steps):
-                self.env.render(mode="human")
+                #self.env.render(mode="human")
                 action, st_dev = self.chose_action(state)
                 state_next, reward, done, info = self.env.step(action)  # step returns obs+1, reward, done
                 state_next = np.array(state_next).reshape(1, state_dim)
@@ -310,7 +309,7 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  divide_rewards_by = 1,
-                 max_buffer_size =256000, # maximum transitions to be stored in buffer
+                 max_buffer_size =64000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  discount_factor  = 0.99,
