@@ -71,13 +71,15 @@ class _critic_network():
     def model(self):
         state = Input(shape=self.state_dim, name='state_input', dtype='float64')
         action = Input(shape=(self.action_dim,), name='action_input')
-        st_dev = Input(shape=(self.action_dim,), name='std_input')
+        #st_dev = Input(shape=(self.action_dim,), name='std_input')
         x = concatenate([state, action])
         x = Dense(128, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim+self.action_dim),1/np.sqrt(self.state_dim+self.action_dim)))(x)
-        x = concatenate([x, state, st_dev])
+        #x = concatenate([x, state, st_dev])
+        x = concatenate([x, state, action])
         x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim+self.action_dim),1/np.sqrt(128+self.state_dim+self.action_dim)))(x)
         out = Dense(1, activation='linear')(x)
-        return Model(inputs=[state, action, st_dev], outputs=out)
+        return Model(inputs=[state, action], outputs=out)
+        #return Model(inputs=[state, action, st_dev], outputs=out)
 
 
 
@@ -109,7 +111,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = 0.02*learning_rate
+        self.dist_learning_rate = 0.1*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
@@ -176,7 +178,8 @@ class DDPG():
     def ANN_update(self, ANN, QNN, opt, St):
         with tf.GradientTape(persistent=True) as tape:
             A,s = ANN(St)
-            Q = -(QNN([St, A, s])-self.log_prob(A,s))
+            #Q = -(QNN([St, A, s])-self.log_prob(A,s))
+            Q = -(QNN([St, A])-0.01*self.log_prob(A,s))
         dq_da = tape.gradient(Q, [A,s])
 
         self.dq_da_rec.append(dq_da)
@@ -201,13 +204,15 @@ class DDPG():
         self.add_noise(self.ANN_t,self.ANN, self.eps)
         self.tow_update(self.QNN_t, self.QNN, 0.005)
         A_,s_ = self.ANN(St_)
-        Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
+        #Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
+        Q_ = self.QNN_t([St_, A_])-0.01*self.log_prob(A_,s_)
         self.Q = Rt + (1-dt)*gamma*Q_
 
 
     def TD2(self):
         self.tr += 1
-        self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At, self.st], self.Q)
+        #self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At, self.st], self.Q)
+        self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At], self.Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, self.St)
 
 
