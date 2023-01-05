@@ -155,7 +155,7 @@ class DDPG():
     def add_noise(self, ANN_, ANN, scale):
         ANN_.set_weights(ANN.get_weights())
         for layer in ANN_.trainable_weights:
-            layer.assign_add(np.random.normal(loc=0.0, scale=0.2*scale, size=layer.shape))
+            layer.assign_add(np.random.normal(loc=0.0, scale=0.1*scale, size=layer.shape))
 
 
     def chose_action(self, state):
