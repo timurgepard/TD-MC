@@ -71,15 +71,15 @@ class _critic_network():
     def model(self):
         state = Input(shape=self.state_dim, name='state_input', dtype='float64')
         action = Input(shape=(self.action_dim,), name='action_input')
-        #st_dev = Input(shape=(self.action_dim,), name='std_input')
+        st_dev = Input(shape=(self.action_dim,), name='std_input')
         x = concatenate([state, action])
         x = Dense(128, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim+self.action_dim),1/np.sqrt(self.state_dim+self.action_dim)))(x)
-        #x = concatenate([x, state, st_dev])
-        x = concatenate([x, state, action])
+        x = concatenate([x, state, st_dev])
+        #x = concatenate([x, state, action])
         x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim+self.action_dim),1/np.sqrt(128+self.state_dim+self.action_dim)))(x)
         out = Dense(1, activation='linear')(x)
-        return Model(inputs=[state, action], outputs=out)
-        #return Model(inputs=[state, action, st_dev], outputs=out)
+        #return Model(inputs=[state, action], outputs=out)
+        return Model(inputs=[state, action, st_dev], outputs=out)
 
 
 
@@ -111,7 +111,7 @@ class DDPG():
 
         self.critic_learning_rate = learning_rate
         self.act_learning_rate = 0.1*learning_rate
-        self.dist_learning_rate = 0.1*learning_rate
+        self.dist_learning_rate = 0.025*learning_rate
 
         self.n_episodes = n_episodes
         self.env = env
@@ -137,8 +137,9 @@ class DDPG():
         self.QNN_opt = Adam(self.critic_learning_rate)
         self.replay = Replay(self.max_buffer_size, self.batch_size)
         self.ANN = _actor_network(self.state_dim, self.action_dim).model()
-        self.QNN = _critic_network(self.state_dim, self.action_dim).model()
+        self.ANN_ = _actor_network(self.state_dim, self.action_dim).model()
         self.ANN_t = _actor_network(self.state_dim, self.action_dim).model()
+        self.QNN = _critic_network(self.state_dim, self.action_dim).model()
         self.QNN_t = _critic_network(self.state_dim, self.action_dim).model()
         self.ANN_t.set_weights(self.ANN.get_weights())
         self.QNN_t.set_weights(self.QNN.get_weights())
@@ -158,7 +159,7 @@ class DDPG():
 
 
     def chose_action(self, state):
-        action, st_dev = self.ANN_t(state)
+        action, st_dev = self.ANN_(state)
         action =  tf.random.normal([self.action_dim], action[0], st_dev[0])
         self.std.append(st_dev[0]) #logging
         return np.tanh(action), st_dev
@@ -178,8 +179,7 @@ class DDPG():
     def ANN_update(self, ANN, QNN, opt, St):
         with tf.GradientTape(persistent=True) as tape:
             A,s = ANN(St)
-            #Q = -(QNN([St, A, s])-self.log_prob(A,s))
-            Q = -(QNN([St, A])-0.01*self.log_prob(A,s))
+            Q = -(QNN([St, A, s])-0.1*self.log_prob(A,s))
         dq_da = tape.gradient(Q, [A,s])
 
         self.dq_da_rec.append(dq_da)
@@ -201,19 +201,18 @@ class DDPG():
 
     def TD1(self):
         self.St, self.At, self.st, Rt, St_, gamma, dt = self.replay.sample()
-        self.add_noise(self.ANN_t,self.ANN, self.eps)
+        self.tow_update(self.ANN_t, self.ANN, 0.005)
         self.tow_update(self.QNN_t, self.QNN, 0.005)
-        A_,s_ = self.ANN(St_)
-        #Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
-        Q_ = self.QNN_t([St_, A_])-0.01*self.log_prob(A_,s_)
+        A_,s_ = self.ANN_t(St_)
+        Q_ = self.QNN_t([St_, A_, s_])-0.1*self.log_prob(A_,s_)
         self.Q = Rt + (1-dt)*gamma*Q_
 
 
     def TD2(self):
         self.tr += 1
-        #self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At, self.st], self.Q)
-        self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At], self.Q)
+        self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At, self.st], self.Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, self.St)
+        self.add_noise(self.ANN_,self.ANN, self.eps)
 
 
 
