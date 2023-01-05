@@ -179,7 +179,7 @@ class DDPG():
     def ANN_update(self, ANN, QNN, opt, St):
         with tf.GradientTape(persistent=True) as tape:
             A,s = ANN(St)
-            Q = -(QNN([St, A, s])-0.1*self.log_prob(A,s))
+            Q = -(QNN([St, A, s])-self.log_prob(A,s))
         dq_da = tape.gradient(Q, [A,s])
 
         self.dq_da_rec.append(dq_da)
@@ -204,13 +204,14 @@ class DDPG():
         self.tow_update(self.ANN_t, self.ANN, 0.005)
         self.tow_update(self.QNN_t, self.QNN, 0.005)
         A_,s_ = self.ANN_t(St_)
-        Q_ = self.QNN_t([St_, A_, s_])-0.1*self.log_prob(A_,s_)
+        Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
         self.Q = Rt + (1-dt)*gamma*Q_
 
 
     def TD2(self):
         self.tr += 1
         self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At, self.st], self.Q)
+        #self.NN_update(self.QNN, self.QNN_opt, [self.St, self.At], self.Q)
         self.ANN_update(self.ANN, self.QNN, self.ANN_opt, self.St)
         self.add_noise(self.ANN_,self.ANN, self.eps)
 
@@ -296,7 +297,7 @@ class DDPG():
                 #f.write(str(score) + '\n')
 
             if episode>=10 and episode%10==0:
-                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std[10]), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
+                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
                 #self.save()
 
 
