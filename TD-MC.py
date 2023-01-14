@@ -1,6 +1,4 @@
 import tensorflow as tf
-import multiprocessing as mp
-import ctypes
 import logging
 tf.get_logger().setLevel(logging.ERROR)
 from tensorflow.keras.optimizers import Adam
@@ -36,7 +34,7 @@ class Replay:
 
     def add_experience(self, transition):
         self.pool.append(transition)
-        self.priorities.append(1.0)
+        self.priorities.append(100.0)
         ln = len(self.pool)
         if ln <= self.max_buffer_size: self.indexes.append(ln-1)
 
@@ -45,9 +43,9 @@ class Replay:
             self.priorities[idx]=priority[0].numpy()
 
     def sample(self):
-        if len(self.pool)>100*self.batch_size:
+        if len(self.pool)>20*self.batch_size:
             #sampled PER, takes bigger sample from population, then takes weighted batch, like net fishing
-            sampled_idxs = random.sample(self.indexes, 100*self.batch_size)
+            sampled_idxs = random.sample(self.indexes, 20*self.batch_size)
             indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
         else:
             #random sample
@@ -77,7 +75,7 @@ class _actor_network():
     def model(self):
         state = Input(shape=self.state_dim, dtype='float64')
         x = Dense(256, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
-        x = concatenate([x, state])
+        x = concatenate([x, state]) #resnet instead of layernorm
         x = Dense(192, activation=atanh, kernel_initializer=RU(-1/np.sqrt(256+self.state_dim),1/np.sqrt(256+self.state_dim)))(x)
         x = concatenate([x, state])
         out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
@@ -323,7 +321,7 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  discount_factor=0.99,
-                 max_buffer_size =2000000, # maximum transitions to be stored in buffer
+                 max_buffer_size =1048000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  explore_time = 6400,
