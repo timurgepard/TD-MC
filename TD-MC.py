@@ -18,7 +18,7 @@ import pybullet_envs
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 # single GPU accelaration is not so efficient because GPU bus is involved
-# If necessary and CUDA fully installed, to enable GPU processing comment above
+# If multiple GPUs are used and CUDA fully installed, to enable GPU processing comment above
 
 
 
@@ -29,14 +29,11 @@ class Replay:
         self.buffer = deque(maxlen=max_time_steps)
         self.pool = deque(maxlen=max_buffer_size)
         self.priorities = deque(maxlen=max_buffer_size)
-        self.indexes = []
-
 
     def add_experience(self, transition):
         self.pool.append(transition)
         self.priorities.append(100.0)
-        ln = len(self.pool)
-        if ln <= self.max_buffer_size: self.indexes.append(ln-1)
+
 
     def add_priorities(self, indices,priorities):
         for idx,priority in zip(indices,priorities):
@@ -45,12 +42,11 @@ class Replay:
     def sample(self):
         if len(self.pool)>20*self.batch_size:
             #sampled PER, takes bigger sample from population, then takes weighted batch, like net fishing
-            sampled_idxs = random.sample(self.indexes, 20*self.batch_size)
+            sampled_idxs = [random.randint(0, len(self.pool)-1) for _ in range(20*self.batch_size)]
             indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
         else:
             #random sample
-            indices = random.sample(self.indexes, self.batch_size)
-
+            indices = [random.randint(0, len(self.pool)-1) for _ in range(self.batch_size)]
         batch = [self.pool[indx] for indx in indices]
         states, actions, st_devs, rewards, returns, next_states, gammas, dones = zip(*batch)
         states = tf.convert_to_tensor(states, dtype=tf.float32)
@@ -75,7 +71,7 @@ class _actor_network():
     def model(self):
         state = Input(shape=self.state_dim, dtype='float64')
         x = Dense(256, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
-        x = concatenate([x, state]) #resnet instead of layernorm
+        x = concatenate([x, state])
         x = Dense(192, activation=atanh, kernel_initializer=RU(-1/np.sqrt(256+self.state_dim),1/np.sqrt(256+self.state_dim)))(x)
         x = concatenate([x, state])
         out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
