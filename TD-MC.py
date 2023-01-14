@@ -28,12 +28,33 @@ class Replay:
     def __init__(self, max_buffer_size, max_time_steps, batch_size):
         self.batch_size = batch_size
         self.max_buffer_size = max_buffer_size
-        self.buffer = deque(maxlen=10*max_time_steps)
+        self.buffer = deque(maxlen=max_time_steps)
         self.pool = deque(maxlen=max_buffer_size)
+        self.priorities = deque(maxlen=max_buffer_size)
+        self.indexes = []
+
+
+    def add_experience(self, transition):
+        self.pool.append(transition)
+        self.priorities.append(1.0)
+        ln = len(self.pool)
+        if ln <= self.max_buffer_size: self.indexes.append(ln-1)
+
+    def add_priorities(self, indices,priorities):
+        for idx,priority in zip(indices,priorities):
+            self.priorities[idx]=priority[0].numpy()
 
     def sample(self):
-        sample = random.sample(self.pool, self.batch_size)
-        states, actions, st_devs, rewards, returns, next_states, gammas, dones = zip(*sample)
+        if len(self.pool)>100*self.batch_size:
+            #sampled PER, takes bigger sample from population, then takes weighted batch, like net fishing
+            sampled_idxs = random.sample(self.indexes, 100*self.batch_size)
+            indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
+        else:
+            #random sample
+            indices = random.sample(self.indexes, self.batch_size)
+
+        batch = [self.pool[indx] for indx in indices]
+        states, actions, st_devs, rewards, returns, next_states, gammas, dones = zip(*batch)
         states = tf.convert_to_tensor(states, dtype=tf.float32)
         actions = tf.convert_to_tensor(actions, dtype=tf.float32)
         st_devs = tf.convert_to_tensor(st_devs, dtype=tf.float32)
@@ -41,7 +62,7 @@ class Replay:
         next_states = tf.convert_to_tensor(next_states, dtype=tf.float32)
         gammas = tf.convert_to_tensor(gammas, dtype=tf.float32)
         dones = tf.convert_to_tensor(dones, dtype=tf.float32)
-        return states, actions, st_devs, returns, next_states, gammas, dones
+        return states, actions, st_devs, returns, next_states, gammas, dones, indices
 
 
 
@@ -206,7 +227,7 @@ class DDPG():
 
     def TD_Sutton(self):
         self.tr += 1
-        St, At, st, Rt, St_, gamma, dt = self.replay.sample()
+        St, At, st, Rt, St_, gamma, dt, idx = self.replay.sample()
         self.tow_update(self.ANN_t, self.ANN, 0.005)
         self.tow_update(self.QNN_t, self.QNN, 0.005)
         A_,s_ = self.ANN_t(St_)
@@ -217,6 +238,7 @@ class DDPG():
         with tf.GradientTape() as tape:
             se = (1/2)*(Q-self.QNN([St, At, st]))**2
             mse = tf.math.reduce_mean(se, axis=0)
+        self.replay.add_priorities(idx,se)
         gradient = tape.gradient(mse, self.QNN.trainable_variables)
         self.QNN_opt.apply_gradients(zip(gradient, self.QNN.trainable_variables))
 
@@ -269,7 +291,7 @@ class DDPG():
                         self.replay.buffer[ti][5] = state_next[0]
                         self.replay.buffer[ti][6] = tf.convert_to_tensor([self.gamma**abs(ti)], dtype=tf.float32) #1, 2, 3
                         self.replay.buffer[ti][7] = tf.convert_to_tensor([done], dtype=tf.float32)
-                        self.replay.pool.append(self.replay.buffer[ti])
+                        self.replay.add_experience(self.replay.buffer[ti])
 
                     if len(self.replay.pool)>self.batch_size:
                         if cnt%(self.tr_step+self.explore_time//cnt)==0:
@@ -301,7 +323,7 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  discount_factor=0.99,
-                 max_buffer_size =1048000, # maximum transitions to be stored in buffer
+                 max_buffer_size =2000000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  explore_time = 6400,
