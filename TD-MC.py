@@ -133,7 +133,7 @@ class DDPG():
 
         self.x = 0.0
         self.eps = 1.0
-        self.n_steps = round(4/self.eps) #4 steps
+        self.n_steps = 4#round(4/self.eps) #4 steps
         self.tr_step = 2
 
         self.max_steps = max_time_steps
@@ -233,7 +233,7 @@ class DDPG():
         with tf.GradientTape() as tape:
             se = (1/2)*(Q-self.QNN([St, At, st]))**2
             mse = tf.math.reduce_mean(se, axis=0)
-        self.replay.add_priorities(idx,se)
+        #self.replay.add_priorities(idx,se)
         gradient = tape.gradient(mse, self.QNN.trainable_variables)
         self.QNN_opt.apply_gradients(zip(gradient, self.QNN.trainable_variables))
 
