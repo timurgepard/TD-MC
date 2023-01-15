@@ -133,7 +133,7 @@ class DDPG():
 
         self.x = 0.0
         self.eps = 1.0
-        self.n_steps = 4#round(4/self.eps) #4 steps
+        self.n_steps = round(4/self.eps) #4 steps
         self.tr_step = 2
 
         self.max_steps = max_time_steps
@@ -217,7 +217,7 @@ class DDPG():
         sma = tf.reduce_mean(list(self.dq_da_rec), axis=0)
         dq_da = self.sma_ + (dq_da - sma)
         dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da)
-        self.sma_, self.dq_da_rec[-1] = sma, dq_da
+        self.sma_ = sma
         return dq_da
 
     def TD_Sutton(self):
@@ -243,7 +243,8 @@ class DDPG():
             Q = (self.QNN([St, A, s])-self.log_prob(A,s))
             Q = -tf.math.reduce_mean(Q, axis=0, keepdims=True)
         dq_da = tape.gradient(Q, [A,s])
-        dq_da = self.Kalman_filter(dq_da,s)
+        #dq_da = self.Kalman_filter(dq_da,s)
+        dq_da = self.sma_filter(dq_da)
         da_dtheta = tape.gradient([A,s], self.ANN.trainable_variables, output_gradients=[dq_da[0],dq_da[1]])
         self.ANN_opt.apply_gradients(zip(da_dtheta, self.ANN.trainable_variables))
         self.add_noise(self.ANN_,self.ANN, self.eps)
@@ -253,8 +254,8 @@ class DDPG():
     # epsilon decrease is episode wise but depends on how many training steps were at the last episode
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.75*math.exp(-self.x)+0.25 # 0.25 is some noise at the end
-        self.n_steps = round(4/self.eps) # n-steps increases from 4 to 16
+        self.eps = 0.5*math.exp(-self.x)+0.5 # 0.25 is some noise at the end
+        self.n_steps = round(4/self.eps) # n-steps increases from 4 to 8
         self.tr_ = tr
 
 
