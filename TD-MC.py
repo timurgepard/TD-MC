@@ -32,7 +32,7 @@ class Replay:
 
     def add_experience(self, transition):
         self.pool.append(transition)
-        self.priorities.append(100.0)
+        self.priorities.append(1.0)
 
 
     def add_priorities(self, indices,priorities):
@@ -40,13 +40,14 @@ class Replay:
             self.priorities[idx]=priority[0].numpy()
 
     def sample(self):
-        if len(self.pool)>20*self.batch_size:
+        ln = len(self.pool)-1
+        #if ln>=self.max_buffer_size-1:
             #sampled PER, takes bigger sample from population, then takes weighted batch, like net fishing
-            sampled_idxs = [random.randint(0, len(self.pool)-1) for _ in range(20*self.batch_size)]
-            indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
-        else:
+        #sampled_idxs = [random.randint(0, ln) for _ in range(20*self.batch_size)]
+        #indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
+        #else:
             #random sample
-            indices = [random.randint(0, len(self.pool)-1) for _ in range(self.batch_size)]
+        indices = [random.randint(0, ln) for _ in range(self.batch_size)]
         batch = [self.pool[indx] for indx in indices]
         states, actions, st_devs, rewards, returns, next_states, gammas, dones = zip(*batch)
         states = tf.convert_to_tensor(states, dtype=tf.float32)
@@ -56,7 +57,7 @@ class Replay:
         next_states = tf.convert_to_tensor(next_states, dtype=tf.float32)
         gammas = tf.convert_to_tensor(gammas, dtype=tf.float32)
         dones = tf.convert_to_tensor(dones, dtype=tf.float32)
-        return states, actions, st_devs, returns, next_states, gammas, dones, indices
+        return states, actions, st_devs, returns, next_states, gammas, dones, indices#, weights
 
 
 
