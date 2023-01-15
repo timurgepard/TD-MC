@@ -1,5 +1,10 @@
 # TD-MC
 Temporal Difference converting to Monte-Carlo.
+
+
+![image](https://user-images.githubusercontent.com/13238473/212532951-3fac4507-1193-49d2-b86e-32ecc54be66a.png)
+
+
 Dedicated to Richard Sutton, Michele Folgheraiter, my mom and wife.
 Big Thanks to the Lord!
 
