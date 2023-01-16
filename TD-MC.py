@@ -254,7 +254,7 @@ class DDPG():
     # epsilon decrease is episode wise but depends on how many training steps were at the last episode
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.95*math.exp(-self.x)+0.05 # 0.25 is some noise at the end
+        self.eps = 0.7*math.exp(-self.x)+0.3 # 0.25 is some noise at the end
         self.n_steps = round(4/self.eps) # n-steps increases from 4 to 8
         self.tr_ = tr
 
