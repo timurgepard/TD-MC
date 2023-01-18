@@ -243,8 +243,8 @@ class DDPG():
             Q = (self.QNN([St, A, s])-self.log_prob(A,s))
             Q = -tf.math.reduce_mean(Q, axis=0, keepdims=True)
         dq_da = tape.gradient(Q, [A,s])
-        #dq_da = self.Kalman_filter(dq_da,s)
-        dq_da = self.sma_filter(dq_da)
+        dq_da = self.Kalman_filter(dq_da,s)
+        #dq_da = self.sma_filter(dq_da)
         da_dtheta = tape.gradient([A,s], self.ANN.trainable_variables, output_gradients=[dq_da[0],dq_da[1]])
         self.ANN_opt.apply_gradients(zip(da_dtheta, self.ANN.trainable_variables))
         self.add_noise(self.ANN_,self.ANN, self.eps)
@@ -306,9 +306,6 @@ class DDPG():
                 print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
                 self.save()
 
-        queue.close()
-        queue.join_thread()
-        p.join()
 
 env = gym.make('HumanoidBulletEnv-v0').env
 #env = gym.make('BipedalWalker-v3').env
