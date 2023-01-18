@@ -243,8 +243,8 @@ class DDPG():
             Q = (self.QNN([St, A, s])-self.log_prob(A,s))
             Q = -tf.math.reduce_mean(Q, axis=0, keepdims=True)
         dq_da = tape.gradient(Q, [A,s])
-        dq_da = self.Kalman_filter(dq_da,s)
-        #dq_da = self.sma_filter(dq_da)
+        #dq_da = self.Kalman_filter(dq_da,s)
+        dq_da = self.sma_filter(dq_da)
         da_dtheta = tape.gradient([A,s], self.ANN.trainable_variables, output_gradients=[dq_da[0],dq_da[1]])
         self.ANN_opt.apply_gradients(zip(da_dtheta, self.ANN.trainable_variables))
         self.add_noise(self.ANN_,self.ANN, self.eps)
@@ -254,8 +254,8 @@ class DDPG():
     # epsilon decrease is episode wise but depends on how many training steps were at the last episode
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = 0.7*math.exp(-self.x)+0.3 # 0.25 is some noise at the end
-        #self.n_steps = round(4/self.eps) # n-steps increases from 4 to 8
+        self.eps = math.exp(-self.x) # 0.25 is some noise at the end
+        self.n_steps = round(4/self.eps) # n-steps increases from 4 to 8
         self.tr_ = tr
 
 
@@ -283,11 +283,12 @@ class DDPG():
                     t_back = min(t, self.n_steps)
                     for ti in range(-1, -t_back-2, -1):
                         Return = self.gamma*Return + self.replay.buffer[ti][3]
-                        self.replay.buffer[ti][4] = tf.convert_to_tensor([Return], dtype=tf.float32)
-                        self.replay.buffer[ti][5] = state_next[0]
-                        self.replay.buffer[ti][6] = tf.convert_to_tensor([self.gamma**abs(ti)], dtype=tf.float32) #1, 2, 3
-                        self.replay.buffer[ti][7] = tf.convert_to_tensor([done], dtype=tf.float32)
-                        self.replay.add_experience(self.replay.buffer[ti])
+                        if abs(ti)>=(self.n_steps-3):
+                            self.replay.buffer[ti][4] = tf.convert_to_tensor([Return], dtype=tf.float32)
+                            self.replay.buffer[ti][5] = state_next[0]
+                            self.replay.buffer[ti][6] = tf.convert_to_tensor([self.gamma**abs(ti)], dtype=tf.float32) #1, 2, 3
+                            self.replay.buffer[ti][7] = tf.convert_to_tensor([done], dtype=tf.float32)
+                            self.replay.add_experience(self.replay.buffer[ti])
 
                     if len(self.replay.pool)>self.batch_size:
                         if cnt%(self.tr_step+self.explore_time//cnt)==0:
