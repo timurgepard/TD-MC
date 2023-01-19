@@ -91,10 +91,12 @@ class _critic_network():
         st_dev = Input(shape=self.action_dim, name='std_input')
         x = concatenate([state, action])
         x = Dense(128, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim+self.action_dim),1/np.sqrt(self.state_dim+self.action_dim)))(x)
-        x = concatenate([x, state, st_dev])
+        #x = concatenate([x, state, st_dev])
+        x = concatenate([x, state, action])
         x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim+self.action_dim),1/np.sqrt(128+self.state_dim+self.action_dim)))(x)
         out = Dense(1, activation='linear')(x)
-        return Model(inputs=[state, action, st_dev], outputs=out)
+        #return Model(inputs=[state, action, st_dev], outputs=out)
+        return Model(inputs=[state, action], outputs=out)
 
 
 
@@ -224,12 +226,14 @@ class DDPG():
         self.tow_update(self.ANN_t, self.ANN, 0.005)
         self.tow_update(self.QNN_t, self.QNN, 0.005)
         A_,s_ = self.ANN_t(St_)
-        Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
+        #Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
+        Q_ = self.QNN_t([St_, A_])-self.log_prob(A_,s_)
         Q = Rt + (1-dt)*gamma*Q_
 
         #DDPG critic network regression to target but with -log_prob and critic taking st_dev as input
         with tf.GradientTape() as tape:
-            se = (1/2)*(Q-self.QNN([St, At, st]))**2
+            #se = (1/2)*(Q-self.QNN([St, At, st]))**2
+            se = (1/2)*(Q-self.QNN([St, At]))**2
             mse = tf.math.reduce_mean(se, axis=0)
         #self.replay.add_priorities(idx,se)
         gradient = tape.gradient(mse, self.QNN.trainable_variables)
@@ -238,7 +242,8 @@ class DDPG():
         #DDPG's actor gradient update but with -log_prob, critic taking st_dev as input and smoothing:
         with tf.GradientTape(persistent=True) as tape:
             A,s = self.ANN(St)
-            Q = (self.QNN([St, A, s])-self.log_prob(A,s))
+            #Q = (self.QNN([St, A, s])-self.log_prob(A,s))
+            Q = (self.QNN([St, A])-0.2*self.log_prob(A,s))
             Q = -tf.math.reduce_mean(Q, axis=0, keepdims=True)
         dq_da = tape.gradient(Q, [A,s])
         #dq_da = self.Kalman_filter(dq_da,s)
@@ -253,7 +258,7 @@ class DDPG():
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
         self.eps = 0.75*math.exp(-self.x)+0.25 # 0.25 is some noise at the end
-        self.n_steps = round(4/self.eps) # n-steps increases from 4 to 16
+        #self.n_steps = round(4/self.eps) # n-steps increases from 4 to 16
         self.tr_ = tr
 
 
@@ -281,12 +286,12 @@ class DDPG():
                     t_back = min(t, self.n_steps)
                     for ti in range(-1, -t_back-2, -1):
                         Return = self.gamma*Return + self.replay.buffer[ti][3]
-                        if abs(ti)>=(self.n_steps-3):
-                            self.replay.buffer[ti][4] = tf.convert_to_tensor([Return], dtype=tf.float32)
-                            self.replay.buffer[ti][5] = state_next[0]
-                            self.replay.buffer[ti][6] = tf.convert_to_tensor([self.gamma**abs(ti)], dtype=tf.float32) #1, 2, 3
-                            self.replay.buffer[ti][7] = tf.convert_to_tensor([done], dtype=tf.float32)
-                            self.replay.add_experience(self.replay.buffer[ti])
+                        #if abs(ti)>=(self.n_steps-3):
+                        self.replay.buffer[ti][4] = tf.convert_to_tensor([Return], dtype=tf.float32)
+                        self.replay.buffer[ti][5] = state_next[0]
+                        self.replay.buffer[ti][6] = tf.convert_to_tensor([self.gamma**abs(ti)], dtype=tf.float32) #1, 2, 3
+                        self.replay.buffer[ti][7] = tf.convert_to_tensor([done], dtype=tf.float32)
+                        self.replay.add_experience(self.replay.buffer[ti])
 
                     if len(self.replay.pool)>self.batch_size:
                         if cnt%(self.tr_step+self.explore_time//cnt)==0:
@@ -301,13 +306,16 @@ class DDPG():
             t_history.append(t)
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
+            print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
             if episode>=50 and episode%50==0:
-                print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
                 self.save()
 
 
-env = gym.make('HumanoidBulletEnv-v0').env
+#env = gym.make('HumanoidBulletEnv-v0').env
 #env = gym.make('BipedalWalker-v3').env
+env = gym.make('HalfCheetahBulletEnv-v0').env
+
+
 
 
 ddpg = DDPG(     env , # Gym environment with continous action space
