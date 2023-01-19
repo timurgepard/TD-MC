@@ -227,7 +227,7 @@ class DDPG():
         self.tow_update(self.QNN_t, self.QNN, 0.005)
         A_,s_ = self.ANN_t(St_)
         #Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
-        Q_ = self.QNN_t([St_, A_])-self.log_prob(A_,s_)
+        Q_ = self.QNN_t([St_, A_])-0.2*self.log_prob(A_,s_)
         Q = Rt + (1-dt)*gamma*Q_
 
         #DDPG critic network regression to target but with -log_prob and critic taking st_dev as input
@@ -311,9 +311,9 @@ class DDPG():
                 self.save()
 
 
-#env = gym.make('HumanoidBulletEnv-v0').env
+env = gym.make('HumanoidBulletEnv-v0').env
 #env = gym.make('BipedalWalker-v3').env
-env = gym.make('HalfCheetahBulletEnv-v0').env
+#env = gym.make('HalfCheetahBulletEnv-v0').env
 
 
 
