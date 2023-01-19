@@ -43,8 +43,8 @@ class Replay:
         ln = len(self.pool)-1
         #if ln>=self.max_buffer_size-1:
             #sampled PER, takes bigger sample from population, then takes weighted batch, like net fishing
-        #sampled_idxs = [random.randint(0, ln) for _ in range(20*self.batch_size)]
-        #indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
+            #sampled_idxs = [random.randint(0, ln) for _ in range(20*self.batch_size)]
+            #indices = random.choices(sampled_idxs, k=self.batch_size, weights=[self.priorities[indx] for indx in sampled_idxs])
         #else:
             #random sample
         indices = [random.randint(0, ln) for _ in range(self.batch_size)]
@@ -71,9 +71,9 @@ class _actor_network():
 
     def model(self):
         state = Input(shape=self.state_dim, dtype='float64')
-        x = Dense(256, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
+        x = Dense(128, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim),1/np.sqrt(self.state_dim)))(state)
         x = concatenate([x, state])
-        x = Dense(192, activation=atanh, kernel_initializer=RU(-1/np.sqrt(256+self.state_dim),1/np.sqrt(256+self.state_dim)))(x)
+        x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim),1/np.sqrt(128+self.state_dim)))(x)
         x = concatenate([x, state])
         out = Dense(self.action_dim, activation='tanh',kernel_initializer=RU(-0.003,0.003))(x)
         st_dev = Dense(self.action_dim, activation='softplus',kernel_initializer=RU(-0.003,0.003))(x)
@@ -90,9 +90,9 @@ class _critic_network():
         action = Input(shape=self.action_dim, name='action_input')
         st_dev = Input(shape=self.action_dim, name='std_input')
         x = concatenate([state, action])
-        x = Dense(256, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim+self.action_dim),1/np.sqrt(self.state_dim+self.action_dim)))(x)
+        x = Dense(128, activation=atanh, kernel_initializer=RU(-1/np.sqrt(self.state_dim+self.action_dim),1/np.sqrt(self.state_dim+self.action_dim)))(x)
         x = concatenate([x, state, st_dev])
-        x = Dense(192, activation=atanh, kernel_initializer=RU(-1/np.sqrt(256+self.state_dim+self.action_dim),1/np.sqrt(256+self.state_dim+self.action_dim)))(x)
+        x = Dense(96, activation=atanh, kernel_initializer=RU(-1/np.sqrt(128+self.state_dim+self.action_dim),1/np.sqrt(128+self.state_dim+self.action_dim)))(x)
         out = Dense(1, activation='linear')(x)
         return Model(inputs=[state, action, st_dev], outputs=out)
 
@@ -206,19 +206,17 @@ class DDPG():
         dq_da = tf.convert_to_tensor(dq_da, dtype=tf.float32)
         p = self.p + s
         K = p/(p+self.eps)
-        dq_da = self.dq_da + K*(dq_da-self.dq_da)
-        self.dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da)
+        self.dq_da = dq_da = self.dq_da + K*(dq_da-self.dq_da)
         self.p = (1-K)*self.p
-        return self.dq_da
+        return tf.math.abs(dq_da)*tf.math.tanh(dq_da)
 
     # Timur filter, sma_prev + (dq_da - sma), sma for 10
     def sma_filter(self, dq_da):
         self.dq_da_rec.append(dq_da)
         sma = tf.reduce_mean(list(self.dq_da_rec), axis=0)
         dq_da = self.sma_ + (dq_da - sma)
-        dq_da = tf.math.abs(dq_da)*tf.math.tanh(dq_da)
         self.sma_ = sma
-        return dq_da
+        return tf.math.abs(dq_da)*tf.math.tanh(dq_da)
 
     def TD_Sutton(self):
         self.tr += 1
@@ -254,8 +252,8 @@ class DDPG():
     # epsilon decrease is episode wise but depends on how many training steps were at the last episode
     def eps_step(self, tr):
         self.x += (tr-self.tr_)*self.dist_learning_rate
-        self.eps = math.exp(-self.x) # 0.25 is some noise at the end
-        self.n_steps = round(4/self.eps) # n-steps increases from 4 to 8
+        self.eps = 0.75*math.exp(-self.x)+0.25 # 0.25 is some noise at the end
+        self.n_steps = round(4/self.eps) # n-steps increases from 4 to 16
         self.tr_ = tr
 
 
@@ -317,7 +315,7 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  critic=None,
                  buffer=None,
                  discount_factor=0.99,
-                 max_buffer_size =1048000, # maximum transitions to be stored in buffer
+                 max_buffer_size =512000, # maximum transitions to be stored in buffer
                  batch_size = 128, # batch size for training actor and critic networks
                  max_time_steps = 200,# no of time steps per epoch
                  explore_time = 6400,
