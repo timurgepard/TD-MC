@@ -306,14 +306,16 @@ class DDPG():
             t_history.append(t)
             #with open('Scores.txt', 'a+') as f:
                 #f.write(str(score) + '\n')
+
             print('%d: %f, avg %f, | eps %f | std %f | replay buffer size %d | pool size %d | avg steps at ep %d | steps %d' % (episode, score, np.mean(score_history[-100:]), self.eps, np.mean(self.std), len(self.replay.buffer), len(self.replay.pool), np.mean(t_history[-100:]), cnt))
+
             if episode>=50 and episode%50==0:
                 self.save()
 
 
-env = gym.make('HumanoidBulletEnv-v0').env
+#env = gym.make('HumanoidBulletEnv-v0').env
 #env = gym.make('BipedalWalker-v3').env
-#env = gym.make('HalfCheetahBulletEnv-v0').env
+env = gym.make('HalfCheetahBulletEnv-v0').env
 
 
 
