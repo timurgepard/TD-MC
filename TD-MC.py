@@ -227,7 +227,7 @@ class DDPG():
         self.tow_update(self.QNN_t, self.QNN, 0.005)
         A_,s_ = self.ANN_t(St_)
         #Q_ = self.QNN_t([St_, A_, s_])-self.log_prob(A_,s_)
-        Q_ = self.QNN_t([St_, A_])-0.2*self.log_prob(A_,s_)
+        Q_ = self.QNN_t([St_, A_])-0.1*self.log_prob(A_,s_)
         Q = Rt + (1-dt)*gamma*Q_
 
         #DDPG critic network regression to target but with -log_prob and critic taking st_dev as input
@@ -243,7 +243,7 @@ class DDPG():
         with tf.GradientTape(persistent=True) as tape:
             A,s = self.ANN(St)
             #Q = (self.QNN([St, A, s])-self.log_prob(A,s))
-            Q = (self.QNN([St, A])-0.2*self.log_prob(A,s))
+            Q = (self.QNN([St, A])-0.1*self.log_prob(A,s))
             Q = -tf.math.reduce_mean(Q, axis=0, keepdims=True)
         dq_da = tape.gradient(Q, [A,s])
         #dq_da = self.Kalman_filter(dq_da,s)
@@ -334,4 +334,3 @@ ddpg = DDPG(     env , # Gym environment with continous action space
                  n_episodes = 1000000) # no of episodes to run
 
 ddpg.train()
-
